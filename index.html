@@ -621,6 +621,12 @@ self.addEventListener('fetch', e => {
       <input class="settings-input" id="set-tankvol" type="number" placeholder="z.B. 80" min="1" max="2000">
     </div>
     <button class="settings-save-btn" onclick="saveSettings()">✓ SPEICHERN</button>
+    <hr class="settings-divider">
+    <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:10px">DATENSICHERUNG</div>
+    <button class="settings-save-btn" style="background:linear-gradient(135deg,#1a3a1a,#2dc653);margin-bottom:10px" onclick="exportAllData()">⬇ ALLES EXPORTIEREN</button>
+    <button class="settings-save-btn" style="background:linear-gradient(135deg,#1a1a3a,#7a5af8);margin-bottom:10px" onclick="document.getElementById('import-file').click()">⬆ DATEN IMPORTIEREN</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importAllData(this)">
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:10px;line-height:1.5">Export speichert alle Fahrten, Einstellungen<br>und Ereignisse als JSON-Datei</div>
     <button class="modal-close" onclick="closeSettings()">✕ Schließen</button>
   </div>
 </div>
@@ -1781,7 +1787,7 @@ async function fetchPegelForStation(station, distKm) {
                 <div class="tide-val">${lastMin.v} cm</div>
               </div>` : ''}
             </div>
-            <div style="margin-top:8px;font-size:12px;font-weight:600">${currentTide} — <span style="color:${trendColor}">${trendLabel}</span></div>`;
+            <div style="margin-top:8px;font-size:12px;font-weight:600">${currentTide}</div>`;
         }
       }
     } catch(e) {
@@ -2155,6 +2161,76 @@ ${t.track && t.track.length > 0 ? `
     a.click();
     toast('📄 Als HTML gespeichert — im Browser drucken als PDF');
   }
+}
+
+// ---- EXPORT / IMPORT ----
+function exportAllData() {
+  const backup = {
+    version: 2,
+    exportDate: new Date().toISOString(),
+    boatname: settings.boatname || '',
+    settings,
+    state: {
+      trips: state.trips,
+      fuel: state.fuel,
+      engineHours: state.engineHours
+    },
+    logEntries
+  };
+
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  const name = settings.boatname ? settings.boatname.replace(/\s+/g,'-') : 'logbuch';
+  a.href     = url;
+  a.download = `${name}-backup-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`✅ ${state.trips.length} Fahrten exportiert`);
+}
+
+function importAllData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup.state || !backup.settings) throw new Error('Ungültiges Format');
+
+      // Einstellungen wiederherstellen
+      Object.assign(settings, backup.settings);
+      localStorage.setItem('boatlog_settings', JSON.stringify(settings));
+
+      // Fahrten zusammenführen — keine Duplikate (gleiche ID)
+      const existingIds = new Set(state.trips.map(t => t.id));
+      const newTrips = (backup.state.trips || []).filter(t => !existingIds.has(t.id));
+      state.trips = [...newTrips, ...state.trips];
+      state.fuel = backup.state.fuel || state.fuel;
+      state.engineHours = backup.state.engineHours || state.engineHours;
+      save();
+
+      // Ereignisse zusammenführen
+      if (backup.logEntries && backup.logEntries.length) {
+        const existingTs = new Set(logEntries.map(e => e.t));
+        const newEvents = backup.logEntries.filter(e => !existingTs.has(e.t));
+        logEntries = [...newEvents, ...logEntries].sort((a,b) => b.t - a.t).slice(0,200);
+        localStorage.setItem('boatlog_events', JSON.stringify(logEntries));
+      }
+
+      updateBoatHeader();
+      updateUI();
+      renderTrips();
+      openSettings(); // Einstellungen zeigen damit Nutzer sieht was importiert wurde
+      toast(`✅ ${newTrips.length} neue Fahrten importiert`);
+    } catch(err) {
+      toast('⚠️ Import fehlgeschlagen — ungültige Datei');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 
 // ---- INIT ----
