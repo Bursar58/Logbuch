@@ -1797,8 +1797,7 @@ async function fetchPegelForStation(station, distKm) {
 
     // Warnungen
     let warnHTML = '';
-    if (currentCm < 50)  warnHTML = `<div class="pegel-warn">⚠️ Niedriger Wasserstand — Grundberührung möglich</div>`;
-    if (currentCm > 600) warnHTML = `<div class="pegel-warn">⚠️ Hochwasser — Vorsicht beim Anlegen</div>`;
+    if (currentCm < 50) warnHTML = `<div class="pegel-warn">⚠️ Niedriger Wasserstand — Grundberührung möglich</div>`;
 
     const waterName  = station.water ? (station.water.longname || station.water.shortname || '') : '';
     const levelClass = currentCm < 80 ? 'pegel-low' : currentCm > 500 ? 'pegel-high' : '';
