@@ -124,12 +124,13 @@ self.addEventListener('fetch', e => {
   }
   nav button {
     flex: 1; background: none; border: none; color: var(--muted);
-    font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 1px;
-    padding: 12px 4px 10px;
+    font-family: 'Space Mono', monospace; font-size: 6px; letter-spacing: 0px;
+    padding: 10px 1px 8px;
     cursor: pointer; transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    text-transform: uppercase;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    text-transform: uppercase; word-break: break-all;
   }
+  nav button .icon { font-size: 16px; }
   nav button .icon { font-size: 20px; }
   nav button.active { color: var(--teal); }
   nav button:active { opacity: 0.7; }
@@ -141,7 +142,7 @@ self.addEventListener('fetch', e => {
   /* HEADER */
   .page-title {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 36px; letter-spacing: 3px;
+    font-size: 26px; letter-spacing: 2px;
     color: var(--teal); margin-bottom: 4px;
   }
   .page-sub { color: var(--muted); font-size: 12px; letter-spacing: 1px; margin-bottom: 24px; }
@@ -387,6 +388,31 @@ self.addEventListener('fetch', e => {
   .pegel-high { color: var(--red) !important; }
   .pegel-loading { text-align: center; padding: 20px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 12px; }
 
+  /* PEGEL SEARCH MODAL */
+  .pegel-search-input {
+    width: 100%; background: rgba(255,255,255,0.08); border: 1px solid var(--card-border);
+    color: var(--text); border-radius: 10px; padding: 12px 14px;
+    font-family: 'Inter', sans-serif; font-size: 14px; outline: none;
+    transition: border-color 0.2s; margin-bottom: 10px;
+  }
+  .pegel-search-input:focus { border-color: var(--teal); }
+  .pegel-result-item {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .pegel-result-item:active { background: rgba(0,180,216,0.15); border-color: var(--teal); }
+  .pegel-result-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .pegel-result-water { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .pegel-result-dist { font-size: 11px; color: var(--teal); font-family: 'Space Mono', monospace; float: right; }
+  .pin-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(244,162,97,0.15); border: 1px solid rgba(244,162,97,0.4);
+    border-radius: 20px; padding: 3px 10px; font-size: 10px;
+    color: var(--amber); font-family: 'Space Mono', monospace;
+    letter-spacing: 1px; text-transform: uppercase; margin-left: 8px;
+  }
+
   .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
   .empty-state .icon { font-size: 48px; margin-bottom: 12px; display: block; }
 
@@ -492,6 +518,34 @@ self.addEventListener('fetch', e => {
   @keyframes gpsPulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
   .lock-entry { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; padding: 3px 0; }
+
+  /* EINSTELLUNGEN MODAL */
+  .settings-row { margin-bottom: 16px; }
+  .settings-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 6px; display: block; }
+  .settings-input {
+    width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
+    color: var(--text); border-radius: 10px; padding: 12px;
+    font-family: 'Inter', sans-serif; font-size: 15px; outline: none;
+  }
+  .settings-input:focus { border-color: var(--teal); }
+  .settings-save-btn {
+    width: 100%; background: linear-gradient(135deg, #1a3a4a, #00b4d8);
+    border: none; color: #fff; border-radius: 12px; padding: 14px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px;
+    cursor: pointer; margin-top: 6px;
+  }
+  .settings-divider { border: none; border-top: 1px solid var(--card-border); margin: 16px 0; }
+
+  /* KRAFTSTOFF NACH MOTOR AUS */
+  .fuel-after-off {
+    background: rgba(244,162,97,0.08); border: 1px solid rgba(244,162,97,0.3);
+    border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+    display: none;
+  }
+  .fuel-after-off.visible { display: block; }
+  .fuel-after-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--amber); font-family: 'Space Mono', monospace; margin-bottom: 8px; }
+  .fuel-consumption { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: var(--amber); margin-top: 6px; }
+
 </style>
 </head>
 <body>
@@ -517,7 +571,7 @@ self.addEventListener('fetch', e => {
 
 <nav>
   <button class="active" onclick="showPage('dashboard')" id="nav-dashboard">
-    <span class="icon">⚓</span>BRÜCKE
+    <span class="icon">⚓</span>STEUER
   </button>
   <button onclick="showPage('trip')" id="nav-trip">
     <span class="icon">🧭</span>FAHRT
@@ -535,6 +589,64 @@ self.addEventListener('fetch', e => {
 <!-- FLOATING NOTE BUTTON (visible during active trip) -->
 <button class="float-note-btn" id="float-note-btn" onclick="openNotesModal(null)" title="Notiz hinzufügen">📝</button>
 
+<!-- EINSTELLUNGEN MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚙️ EINSTELLUNGEN</div>
+
+    <div class="settings-row">
+      <label class="settings-label">Bootsname</label>
+      <input class="settings-input" id="set-boatname" type="text" placeholder="z.B. Möwe III">
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Amtliches Kennzeichen</label>
+      <input class="settings-input" id="set-registration" type="text" placeholder="z.B. HH-12345">
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Heimathafen</label>
+      <input class="settings-input" id="set-homeport" type="text" placeholder="z.B. Hamburg-Bergedorf">
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Bootsführer</label>
+      <input class="settings-input" id="set-skipper" type="text" placeholder="Vollständiger Name">
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Führerschein-Nr.</label>
+      <input class="settings-input" id="set-license" type="text" placeholder="z.B. SBF Binnen Nr. 12345">
+    </div>
+    <hr class="settings-divider">
+    <div class="settings-row">
+      <label class="settings-label">Tankvolumen (Liter)</label>
+      <input class="settings-input" id="set-tankvol" type="number" placeholder="z.B. 80" min="1" max="2000">
+    </div>
+    <button class="settings-save-btn" onclick="saveSettings()">✓ SPEICHERN</button>
+    <button class="modal-close" onclick="closeSettings()">✕ Schließen</button>
+  </div>
+</div>
+
+<!-- FAHRT BEENDEN BESTÄTIGUNG -->
+<div class="modal-overlay" id="confirm-end-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏁 FAHRT BEENDEN?</div>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:20px">Motor wird gestoppt und Fahrt ins Logbuch gespeichert.</div>
+    <button class="big-btn btn-trip-end" style="margin-bottom:10px" onclick="confirmEndTrip()">🏁 JA, FAHRT BEENDEN</button>
+    <button class="modal-close" onclick="document.getElementById('confirm-end-modal').classList.remove('open')">✕ Abbrechen</button>
+  </div>
+</div>
+
+<!-- PEGEL SEARCH MODAL -->
+<div class="modal-overlay" id="pegel-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🌊 PEGEL AUSWÄHLEN</div>
+    <input class="pegel-search-input" id="pegel-search-input" type="text" placeholder="Suchen z.B. Sankt Pauli, Tatenberg...">
+    <div id="pegel-results-list"></div>
+    <button class="modal-close" onclick="closePegelModal()">✕ Schließen</button>
+  </div>
+</div>
+
 <!-- NOTES MODAL -->
 <div class="modal-overlay" id="notes-modal">
   <div class="modal">
@@ -551,8 +663,13 @@ self.addEventListener('fetch', e => {
 
 <!-- DASHBOARD -->
 <div id="page-dashboard" class="page active">
-  <div class="page-title">BRÜCKE</div>
-  <div class="page-sub">SCHIFFSFÜHRUNG</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+    <div>
+      <div class="page-title">STEUERSTAND</div>
+      <div class="page-sub" id="boat-header-sub">SCHIFFSFÜHRUNG</div>
+    </div>
+    <button onclick="openSettings()" style="background:var(--card);border:1px solid var(--card-border);color:var(--muted);border-radius:10px;padding:8px 12px;font-size:16px;cursor:pointer;margin-top:8px">⚙️</button>
+  </div>
 
   <div class="status-bar">
     <div class="status-item">
@@ -579,22 +696,6 @@ self.addEventListener('fetch', e => {
     <span id="gps-status-text">GPS Standby — Fahrt starten zum Aktivieren</span>
   </div>
 
-  <button id="btn-eng-on" class="big-btn btn-engine-on" onclick="engineOn()">
-    <span>⚙️</span> MOTOR AN
-  </button>
-  <button id="btn-eng-off" class="big-btn btn-engine-off btn-disabled" onclick="engineOff()">
-    <span>🔴</span> MOTOR AUS
-  </button>
-
-  <div style="margin:8px 0 4px; border-top:1px solid var(--card-border); padding-top:16px;"></div>
-
-  <button id="btn-trip-start" class="big-btn btn-trip-start" onclick="showPage('trip')">
-    <span>⛵</span> FAHRT STARTEN
-  </button>
-  <button id="btn-trip-end" class="big-btn btn-trip-end btn-disabled" onclick="endTrip()">
-    <span>🏁</span> FAHRT BEENDEN
-  </button>
-
   <!-- FUEL -->
   <div class="fuel-section">
     <div class="fuel-row">
@@ -607,19 +708,53 @@ self.addEventListener('fetch', e => {
     <input type="range" id="fuel-slider" min="0" max="100" value="75" oninput="updateFuel(this.value)">
   </div>
 
+  <button id="btn-eng-on" class="big-btn btn-engine-on" onclick="engineOn()">
+    <span>⚙️</span> MOTOR AN
+  </button>
+  <button id="btn-eng-off" class="big-btn btn-engine-off btn-disabled" onclick="engineOff()">
+    <span>🔴</span> MOTOR AUS
+  </button>
+
+  <!-- KRAFTSTOFF NACH MOTOR AUS -->
+  <div class="fuel-after-off" id="fuel-after-off">
+    <div class="fuel-after-label">⛽ Kraftstoff jetzt einstellen — Verbrauch wird berechnet</div>
+    <div class="fuel-row">
+      <span style="font-size:13px;color:var(--muted)">Aktueller Stand</span>
+      <span id="fuel-pct-display-after" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--amber)">—</span>
+    </div>
+    <div class="fuel-bar-bg" style="margin:8px 0">
+      <div id="fuel-bar-after" class="fuel-bar low" style="width:75%"></div>
+    </div>
+    <input type="range" id="fuel-slider-after" min="0" max="100" value="75" style="width:100%;accent-color:var(--amber)" oninput="updateFuelAfter(this.value)">
+    <div id="fuel-consumption-display" class="fuel-consumption"></div>
+  </div>
+
+  <div style="margin:8px 0 4px; border-top:1px solid var(--card-border); padding-top:16px;"></div>
+
+  <button id="btn-trip-start" class="big-btn btn-trip-start" onclick="showPage('trip')">
+    <span>⛵</span> FAHRT STARTEN
+  </button>
+  <button id="btn-trip-end" class="big-btn btn-trip-end btn-disabled" onclick="askEndTrip()">
+    <span>🏁</span> FAHRT BEENDEN
+  </button>
+
   <div class="coord-badge" id="gps-coords">📍 GPS: Tippen zum Orten</div>
 
   <!-- WEATHER -->
-  <div class="section-title" style="margin-top:20px">🌤️ WETTERBEDINGUNGEN</div>
+  <div class="section-title" style="margin-top:16px">🌤️ WETTERBEDINGUNGEN</div>
   <div class="weather-card" id="weather-card">
     <div class="weather-loading">⏳ Wetter wird geladen...<br><span style="font-size:10px;margin-top:4px;display:block">Standortzugriff erforderlich</span></div>
   </div>
 
   <!-- PEGELSTAND -->
-  <div class="section-title" style="margin-top:4px">🌊 PEGELSTAND</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+    <div class="section-title" style="margin:0;border:0;padding:0">🌊 PEGELSTAND</div>
+    <span id="pegel-pin-badge" style="display:none" class="pin-badge">📌 FIXIERT</span>
+  </div>
   <div class="pegel-card" id="pegel-card">
     <div class="pegel-loading">⏳ Suche nächsten Pegel...</div>
   </div>
+
 </div>
 
 <!-- TRIP SETUP -->
@@ -628,8 +763,18 @@ self.addEventListener('fetch', e => {
   <div class="page-sub">ABFAHRTSDETAILS</div>
 
   <div class="section">
-    <div class="section-title">Fahrtname</div>
-    <input type="text" id="trip-name" placeholder="z.B. Sonntagsausflug auf der Dove Elbe" style="width:100%">
+    <div class="section-title">Fahrtname / Ziel</div>
+    <input type="text" id="trip-name" placeholder="z.B. Sonntagsausflug Dove Elbe" style="width:100%">
+  </div>
+
+  <div class="section">
+    <div class="section-title">Abfahrtsort</div>
+    <input type="text" id="trip-departure" placeholder="z.B. Steg Bergedorf" style="width:100%">
+  </div>
+
+  <div class="section">
+    <div class="section-title">Zielort</div>
+    <input type="text" id="trip-destination" placeholder="z.B. Tatenberger Schleuse" style="width:100%">
   </div>
 
   <div class="section">
@@ -643,7 +788,7 @@ self.addEventListener('fetch', e => {
 
   <div class="section">
     <div class="section-title">ABFAHRTSNOTIZEN</div>
-    <textarea id="trip-notes" placeholder="Wetter, Wasserstand, Abfahrtshafen..."></textarea>
+    <textarea id="trip-notes" placeholder="Wetter, Wasserstand, besondere Bedingungen..."></textarea>
   </div>
 
   <div class="section">
@@ -683,13 +828,13 @@ self.addEventListener('fetch', e => {
 <div id="page-log" class="page">
   <div class="page-title">LOGBUCH</div>
   <div class="page-sub">FAHRTENHISTORIE</div>
-
   <div id="trips-list">
     <div class="empty-state">
       <span class="icon">📋</span>
       Noch keine Fahrten gespeichert.<br>Starte deine erste Fahrt!
     </div>
   </div>
+  <div id="log-events-container"></div>
 </div>
 
 <script>
@@ -705,6 +850,90 @@ state = Object.assign({
 let gpsWatcher = null;
 let timerInterval = null;
 let currentMap = null;
+
+// ---- EINSTELLUNGEN ----
+let settings = JSON.parse(localStorage.getItem('boatlog_settings') || '{}');
+settings = Object.assign({ boatname: '', registration: '', homeport: '', skipper: '', license: '', tankVol: 0 }, settings);
+
+function saveSettings() {
+  settings.boatname     = document.getElementById('set-boatname').value.trim();
+  settings.registration = document.getElementById('set-registration').value.trim();
+  settings.homeport     = document.getElementById('set-homeport').value.trim();
+  settings.skipper      = document.getElementById('set-skipper').value.trim();
+  settings.license      = document.getElementById('set-license').value.trim();
+  settings.tankVol      = parseFloat(document.getElementById('set-tankvol').value) || 0;
+  localStorage.setItem('boatlog_settings', JSON.stringify(settings));
+  updateBoatHeader();
+  closeSettings();
+  toast('✓ Einstellungen gespeichert');
+}
+
+function openSettings() {
+  document.getElementById('set-boatname').value     = settings.boatname;
+  document.getElementById('set-registration').value = settings.registration;
+  document.getElementById('set-homeport').value     = settings.homeport;
+  document.getElementById('set-skipper').value      = settings.skipper;
+  document.getElementById('set-license').value      = settings.license;
+  document.getElementById('set-tankvol').value      = settings.tankVol || '';
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function updateBoatHeader() {
+  const sub = document.getElementById('boat-header-sub');
+  if (!sub) return;
+  const parts = [settings.boatname, settings.registration].filter(Boolean);
+  sub.textContent = parts.length ? parts.join(' · ') : 'SCHIFFSFÜHRUNG';
+}
+
+// ---- KRAFTSTOFF NACH MOTOR AUS ----
+function showFuelAfterOff() {
+  const panel = document.getElementById('fuel-after-off');
+  panel.classList.add('visible');
+  document.getElementById('fuel-slider-after').value = state.fuel;
+  updateFuelAfter(state.fuel);
+}
+
+function hideFuelAfterOff() {
+  document.getElementById('fuel-after-off').classList.remove('visible');
+}
+
+function updateFuelAfter(v) {
+  v = parseInt(v);
+  document.getElementById('fuel-pct-display-after').textContent = v + '%';
+  document.getElementById('fuel-bar-after').style.width = v + '%';
+  const fuelAtDep = state.fuelAtDep !== undefined ? state.fuelAtDep : state.fuel;
+  const diff = fuelAtDep - v;
+  const display = document.getElementById('fuel-consumption-display');
+  if (diff > 0 && settings.tankVol > 0) {
+    const liters = ((diff / 100) * settings.tankVol).toFixed(1);
+    display.textContent = `≈ ${liters} L verbraucht`;
+  } else if (diff > 0) {
+    display.textContent = `${diff}% verbraucht`;
+  } else {
+    display.textContent = '';
+  }
+  state.fuel = v;
+  document.getElementById('fuel-pct-display').textContent = v + '%';
+  document.getElementById('fuel-slider').value = v;
+  document.getElementById('fuel-bar').style.width = v + '%';
+  document.getElementById('fuel-bar').className = 'fuel-bar' + (v < 25 ? ' low' : '');
+  save();
+}
+
+// ---- FAHRT BEENDEN BESTÄTIGUNG ----
+function askEndTrip() {
+  if (!state.tripActive) return;
+  document.getElementById('confirm-end-modal').classList.add('open');
+}
+
+function confirmEndTrip() {
+  document.getElementById('confirm-end-modal').classList.remove('open');
+  endTrip();
+}
 
 // ---- SAVE ----
 function save() { localStorage.setItem('boatlog_state', JSON.stringify(state)); }
@@ -733,33 +962,113 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString([], {day:'2-digit', month:'short', year:'numeric'});
 }
 
-// ---- GPS STATUS ----
-function setGPSStatus(status) {
-  const dot = document.getElementById('gps-dot');
-  const text = document.getElementById('gps-status-text');
-  dot.className = 'gps-dot ' + status;
-  if (status === 'active')  text.textContent = 'GPS OK';
-  if (status === 'standby') text.textContent = 'GPS Standby';
-  if (status === 'error')   text.textContent = 'GPS Fehler';
+// ---- GPS SMART LOGGING ----
+
+let lastSavedPoint = null;
+
+// Haversine-Distanz in Metern
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Erdradius in Metern
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+            Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Kurswinkel in Grad zwischen zwei Punkten
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI/180);
+  const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) -
+            Math.sin(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Winkeldifferenz (kürzester Weg, 0-180°)
+function angleDiff(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+// Geschwindigkeit in Knoten aus zwei Punkten berechnen
+function calcSpeedKnots(p1, p2) {
+  const distM = calculateDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+  const dtH = (p2.t - p1.t) / 3600000;
+  if (dtH <= 0) return 0;
+  return (distM / 1000 / 1.852) / dtH;
+}
+
+// Hybrid-Entscheidungslogik
+const DIST_TRIGGER_M   = 20;       // Distanz-Trigger: 20 Meter
+const COURSE_TRIGGER_DEG = 10;     // Kurs-Trigger: 10 Grad
+const TIME_BACKUP_MS   = 10 * 60 * 1000; // Zeit-Backup: 10 Minuten
+const JITTER_SPEED_KTS = 0.3;      // Jitter-Schutz unter 0.3 Knoten
+
+function shouldLogPoint(newPt) {
+  // Erster Punkt immer speichern
+  if (!lastSavedPoint) return true;
+
+  const distM   = calculateDistance(lastSavedPoint.lat, lastSavedPoint.lng, newPt.lat, newPt.lng);
+  const dtMs    = newPt.t - lastSavedPoint.t;
+  const speedKts = calcSpeedKnots(lastSavedPoint, newPt);
+
+  // Zeit-Backup: immer nach 10 Minuten speichern (auch im Stand)
+  if (dtMs >= TIME_BACKUP_MS) return true;
+
+  // Jitter-Schutz: bei sehr langsamer Fahrt (<0.3 kts) nur Zeit-Backup nutzen
+  if (speedKts < JITTER_SPEED_KTS) return false;
+
+  // Distanz-Trigger: mehr als 20 Meter
+  if (distM >= DIST_TRIGGER_M) return true;
+
+  // Kurs-Trigger: mehr als 10° Abweichung
+  if (lastSavedPoint.bearing !== undefined) {
+    const newBearing = calculateBearing(lastSavedPoint.lat, lastSavedPoint.lng, newPt.lat, newPt.lng);
+    if (angleDiff(lastSavedPoint.bearing, newBearing) >= COURSE_TRIGGER_DEG) return true;
+  }
+
+  return false;
 }
 
 // ---- GPS ----
 function startGPS() {
   if (!navigator.geolocation) { setGPSStatus('error'); return; }
   setGPSStatus('standby');
+  lastSavedPoint = null;
+
   gpsWatcher = navigator.geolocation.watchPosition(pos => {
     setGPSStatus('active');
-    const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude, t: Date.now() };
-    if (state.tripActive) {
-      state.currentTrack.push(pt);
+
+    const newPt = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      t:   Date.now(),
+      acc: Math.round(pos.coords.accuracy || 0)
+    };
+
+    // Kurswinkel vorberechnen falls lastSavedPoint existiert
+    if (lastSavedPoint) {
+      newPt.bearing = calculateBearing(lastSavedPoint.lat, lastSavedPoint.lng, newPt.lat, newPt.lng);
+    }
+
+    // GPS-Koordinaten im UI immer aktualisieren
+    const speedKts = lastSavedPoint ? calcSpeedKnots(lastSavedPoint, newPt).toFixed(1) : '—';
+    document.getElementById('gps-coords').textContent =
+      `📍 ${newPt.lat.toFixed(5)}, ${newPt.lng.toFixed(5)} · ${speedKts} kts`;
+
+    // Nur bei aktiver Fahrt und wenn Logging-Kriterium erfüllt
+    if (state.tripActive && shouldLogPoint(newPt)) {
+      state.currentTrack.push(newPt);
+      lastSavedPoint = { ...newPt };
       save();
     }
-    document.getElementById('gps-coords').textContent =
-      `📍 ${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`;
+
   }, err => {
     setGPSStatus('error');
     console.warn('GPS Fehler:', err.message);
-  }, { enableHighAccuracy: true, maximumAge: 10000 });
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
 }
 function stopGPS() {
   if (gpsWatcher) navigator.geolocation.clearWatch(gpsWatcher);
@@ -784,6 +1093,8 @@ function engineOff() {
   save(); updateUI();
   logEvent('🔴 Motor AUS', `Laufzeit: ${formatDuration(hrs*3600000)}`);
   toast('🔴 Motor gestoppt');
+  // Kraftstoffregler einblenden für Verbrauchserfassung
+  showFuelAfterOff();
 }
 
 // ---- TRIP ----
@@ -793,10 +1104,13 @@ function startTrip() {
   state.tripStart = Date.now();
   state.currentTrack = [];
   state.crew = [...crew]; // from UI
-  state.tripName = document.getElementById('trip-name').value || 'Fahrt ' + (state.trips.length+1);
-  state.tripNotes = document.getElementById('trip-notes').value;
-  state.fuelAtDep = state.fuel;
-  state.weatherAtDep = state.lastWeather || null;
+  state.tripName        = document.getElementById('trip-name').value || 'Fahrt ' + (state.trips.length+1);
+  state.tripNotes       = document.getElementById('trip-notes').value;
+  state.tripDeparture   = document.getElementById('trip-departure').value;
+  state.tripDestination = document.getElementById('trip-destination').value;
+  state.fuelAtDep       = state.fuel;
+  state.weatherAtDep    = state.lastWeather || null;
+  hideFuelAfterOff();
 
   // Auto engine on
   if (!state.engineOn) engineOn();
@@ -811,16 +1125,24 @@ function startTrip() {
 function endTrip() {
   if (!state.tripActive) return;
   const duration = Date.now() - state.tripStart;
+  const fuelDiff = (state.fuelAtDep || state.fuel) - state.fuel;
+  const fuelLiters = (settings.tankVol > 0 && fuelDiff > 0) ? ((fuelDiff/100)*settings.tankVol).toFixed(1) : null;
   const trip = {
     id: Date.now(),
     name: state.tripName,
     notes: state.tripNotes,
+    departure: state.tripDeparture || '',
+    destination: state.tripDestination || '',
     crew: [...state.crew],
+    skipper: settings.skipper || '',
+    boatname: settings.boatname || '',
+    registration: settings.registration || '',
     start: state.tripStart,
     end: Date.now(),
     duration,
     fuelStart: state.fuelAtDep || state.fuel,
     fuelEnd: state.fuel,
+    fuelLiters,
     weather: state.weatherAtDep || null,
     logNotes: state.currentNotes || [],
     track: [...state.currentTrack]
@@ -833,6 +1155,8 @@ function endTrip() {
 
   engineOff();
   stopGPS();
+  lastSavedPoint = null;
+  hideFuelAfterOff();
   save(); updateUI(); renderTrips();
   logEvent('🏁 Fahrt BEENDET', `${trip.name} — Dauer: ${formatDuration(duration)}`);
   toast('🏁 Fahrt gespeichert!');
@@ -935,7 +1259,8 @@ function renderTrips() {
       <div class="trip-name" onclick="viewTripMap(${i})" style="cursor:pointer">${t.name}</div>
       <div class="trip-meta">
         <span>👥 ${t.crew.length ? t.crew.join(', ') : 'Solo'}</span>
-        <span>⛽ ${t.fuelStart}% → ${t.fuelEnd}%</span>
+        ${t.departure ? `<span>🚢 ${t.departure}${t.destination ? ' → ' + t.destination : ''}</span>` : ''}
+        <span>⛽ ${t.fuelStart}% → ${t.fuelEnd}%${t.fuelLiters ? ' (≈' + t.fuelLiters + ' L)' : ''}</span>
         ${stats.distNm > 0 ? `<span>🧭 ${stats.distNm.toFixed(1)} nm</span>` : ''}
         ${notes.length ? `<span>📝 ${notes.length} Notiz${notes.length>1?'en':''}</span>` : ''}
       </div>
@@ -1166,19 +1491,18 @@ function showPage(id) {
   document.getElementById('nav-'+id).classList.add('active');
 
   if (id === 'log') {
-    const logEl = document.getElementById('trips-list');
     renderTrips();
-    // also show raw events
-    if (logEntries.length) {
-      const evEl = document.createElement('div');
-      evEl.innerHTML = `<div class="section-title" style="margin-top:20px">EREIGNISPROTOKOLL</div>` +
+    // Fix: clear and re-render events without duplicating
+    const evContainer = document.getElementById('log-events-container');
+    if (evContainer) {
+      evContainer.innerHTML = logEntries.length ? `
+        <div class="section-title" style="margin-top:20px">EREIGNISPROTOKOLL</div>` +
         logEntries.slice(0,30).map(e => `
           <div class="log-entry">
             <div class="log-time">${formatDate(e.t)} — ${formatTime(e.t)}</div>
             <div class="log-event">${e.event}</div>
             ${e.detail ? `<div class="log-detail">${e.detail}</div>` : ''}
-          </div>`).join('');
-      document.getElementById('page-log').appendChild(evEl);
+          </div>`).join('') : '';
     }
   }
 
@@ -1347,81 +1671,106 @@ async function fetchWeather() {
 }
 
 // ---- PEGELSTAND ----
-async function fetchPegel() {
+let allStations = null;       // Cache der Stationsliste
+let pinnedStation = null;     // Manuell gepinnter Pegel
+
+async function loadAllStations() {
+  if (allStations) return allStations;
+  const res = await fetch('https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=false');
+  allStations = (await res.json()).filter(s => s.latitude && s.longitude);
+  return allStations;
+}
+
+async function fetchPegelForStation(station, distKm) {
   const card = document.getElementById('pegel-card');
-  if (!navigator.geolocation) {
-    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht verfügbar</div>`;
-    return;
-  }
+  try {
+    const measUrl = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/currentmeasurement.json`;
+    const tsUrl   = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=PT6H`;
+    const [measRes, tsRes] = await Promise.all([fetch(measUrl), fetch(tsUrl)]);
+    const meas   = await measRes.json();
+    const tsData = await tsRes.json();
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const { latitude: lat, longitude: lng } = pos.coords;
-    card.innerHTML = `<div class="pegel-loading">🔍 Suche nächsten Pegel...</div>`;
+    const currentCm = meas.value;
 
+    // Trend
+    let trend = '➡️', trendColor = 'var(--muted)', trendLabel = 'Gleichbleibend';
+    if (tsData && tsData.length >= 3) {
+      const recent = tsData.slice(-6);
+      const diff = recent[recent.length-1].value - recent[0].value;
+      if (diff > 3)       { trend = '📈'; trendColor = 'var(--teal)';  trendLabel = `+${diff.toFixed(0)} cm (steigend)`; }
+      else if (diff < -3) { trend = '📉'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
+    }
+
+    // Gezeiten — 24h Daten für zuverlässige Extrema
+    let tideHTML = '';
     try {
-      // Step 1: Get all stations from PEGELONLINE
-      const stationsUrl = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=false`;
-      const res = await fetch(stationsUrl);
-      const stations = await res.json();
+      const tsUrl24 = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P1D`;
+      const tsRes24 = await fetch(tsUrl24);
+      const tsData24 = await tsRes24.json();
 
-      // Step 2: Find nearest station by haversine distance
-      let nearest = null, minDist = Infinity;
-      for (const st of stations) {
-        if (!st.latitude || !st.longitude) continue;
-        const d = haversineKm(lat, lng, st.latitude, st.longitude);
-        if (d < minDist) { minDist = d; nearest = st; }
-      }
+      if (tsData24 && tsData24.length >= 12) {
+        const vals  = tsData24.map(d => d.value);
+        const times = tsData24.map(d => new Date(d.timestamp));
 
-      if (!nearest) throw new Error('No station found');
+        // Glättung: 3-Punkte-Mittelwert um GPS-Rauschen zu eliminieren
+        const smooth = vals.map((v, i) =>
+          i === 0 || i === vals.length-1 ? v :
+          (vals[i-1] + v + vals[i+1]) / 3
+        );
 
-      // Step 3: Get current measurement for nearest station
-      const measUrl = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${nearest.uuid}/W/currentmeasurement.json`;
-      const measRes = await fetch(measUrl);
-      const meas = await measRes.json();
+        // Extrema suchen mit Mindestabstand von 2 Stunden (Gezeitenzyklus ~12h)
+        const minSepMs = 2 * 60 * 60 * 1000;
+        let allMax = [], allMin = [];
 
-      // Step 4: Get timeseries for trend (last 25 readings)
-      const tsUrl = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${nearest.uuid}/W/measurements.json?start=PT6H`;
-      const tsRes = await fetch(tsUrl);
-      const tsData = await tsRes.json();
+        for (let i = 2; i < smooth.length - 2; i++) {
+          const isMax = smooth[i] > smooth[i-1] && smooth[i] > smooth[i-2] &&
+                        smooth[i] > smooth[i+1] && smooth[i] > smooth[i+2];
+          const isMin = smooth[i] < smooth[i-1] && smooth[i] < smooth[i-2] &&
+                        smooth[i] < smooth[i+1] && smooth[i] < smooth[i+2];
 
-      const currentCm = meas.value;
-      const distKm = minDist.toFixed(1);
-
-      // Trend from last readings
-      let trend = '→', trendColor = 'var(--muted)', trendLabel = 'Gleichbleibend';
-      if (tsData && tsData.length >= 3) {
-        const recent = tsData.slice(-6);
-        const first = recent[0].value;
-        const last = recent[recent.length-1].value;
-        const diff = last - first;
-        if (diff > 3) { trend = '📈'; trendColor = 'var(--teal)'; trendLabel = `+${diff.toFixed(0)} cm (steigend)`; }
-        else if (diff < -3) { trend = '📉'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`; }
-        else { trend = '➡️'; trendColor = 'var(--muted)'; trendLabel = 'Gleichbleibend'; }
-      }
-
-      // Tide detection from timeseries — find if we're between a min (Ebbe) or max (Flut)
-      let tideHTML = '';
-      if (tsData && tsData.length >= 6) {
-        const vals = tsData.map(d => d.value);
-        const times = tsData.map(d => new Date(d.timestamp));
-
-        // Find recent local maxima and minima
-        let lastMax = null, lastMin = null;
-        for (let i = 1; i < vals.length - 1; i++) {
-          if (vals[i] > vals[i-1] && vals[i] > vals[i+1]) lastMax = { v: vals[i], t: times[i] };
-          if (vals[i] < vals[i-1] && vals[i] < vals[i+1]) lastMin = { v: vals[i], t: times[i] };
+          if (isMax) {
+            // Nur wenn genug Abstand zum letzten Maximum
+            if (!allMax.length || times[i] - allMax[allMax.length-1].t >= minSepMs) {
+              allMax.push({ v: Math.round(vals[i]), t: times[i] });
+            } else if (vals[i] > allMax[allMax.length-1].v) {
+              // Höheres Maximum ersetzt schwächeres in der Nähe
+              allMax[allMax.length-1] = { v: Math.round(vals[i]), t: times[i] };
+            }
+          }
+          if (isMin) {
+            if (!allMin.length || times[i] - allMin[allMin.length-1].t >= minSepMs) {
+              allMin.push({ v: Math.round(vals[i]), t: times[i] });
+            } else if (vals[i] < allMin[allMin.length-1].v) {
+              allMin[allMin.length-1] = { v: Math.round(vals[i]), t: times[i] };
+            }
+          }
         }
 
-        const fmt = t => t ? t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—';
-        const isTidal = nearest.water && (nearest.water.longname || '').toLowerCase().includes('elbe') ||
-                        (nearest.longname || '').toLowerCase().includes('elbe') ||
-                        (nearest.longname || '').toLowerCase().includes('weser') ||
-                        (nearest.longname || '').toLowerCase().includes('ems');
+        const lastMax = allMax.length ? allMax[allMax.length-1] : null;
+        const lastMin = allMin.length ? allMin[allMin.length-1] : null;
 
-        if (lastMax || lastMin) {
-          const currentTide = (lastMax && lastMin)
-            ? (lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe')
-            : trend === '📈' ? '🌊 Flut' : '🌀 Ebbe';
+        // Dynamische Validierung:
+        // 1. Mindestunterschied = 20% des Gesamtwertebereichs der 24h-Daten
+        // 2. Mindestabstand in Zeit = 1 Stunde zwischen HW und NW
+        const range = Math.max(...vals) - Math.min(...vals);
+        const minDiff = Math.max(50, range * 0.20); // mind. 50cm, oder 20% des Tidenhubs
+        const minTimeSepMs = 60 * 60 * 1000; // mind. 1 Stunde Abstand
+
+        let validPair = false;
+        if (lastMax && lastMin) {
+          const valueDiff = Math.abs(lastMax.v - lastMin.v);
+          const timeDiff  = Math.abs(lastMax.t - lastMin.t);
+          validPair = valueDiff >= minDiff && timeDiff >= minTimeSepMs;
+        }
+
+        const fmt = t => t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+        if (lastMax || (lastMin && validPair)) {
+          // Aktueller Gezeitenstatus — nur wenn valides Paar
+          let currentTide = trend === '📈' ? '🌊 Flut' : '🌀 Ebbe';
+          if (validPair) {
+            currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
+          }
 
           tideHTML = `
             <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND</div>
@@ -1432,70 +1781,150 @@ async function fetchPegel() {
                 <div class="tide-time">${fmt(lastMax.t)}</div>
                 <div class="tide-val">${lastMax.v} cm</div>
               </div>` : ''}
-              ${lastMin ? `<div class="tide-item">
+              ${(lastMin && validPair) ? `<div class="tide-item">
                 <div class="tide-type">🌀</div>
                 <div class="tide-label">Letztes Niedrigwasser</div>
                 <div class="tide-time">${fmt(lastMin.t)}</div>
                 <div class="tide-val">${lastMin.v} cm</div>
               </div>` : ''}
             </div>
-            <div style="margin-top:8px;font-size:12px;font-weight:600">${currentTide} — <span style="color:${trendColor}">${trendLabel}</span></div>
-          `;
+            <div style="margin-top:8px;font-size:12px;font-weight:600">${currentTide} — <span style="color:${trendColor}">${trendLabel}</span></div>`;
         }
       }
-
-      // Warning thresholds (rough estimates)
-      let warnHTML = '';
-      if (nearest.km !== undefined) {
-        if (currentCm < 50) warnHTML = `<div class="pegel-warn">⚠️ Niedriger Wasserstand — Grundberührung möglich</div>`;
-        if (currentCm > 600) warnHTML = `<div class="pegel-warn">⚠️ Hochwasser — Vorsicht beim Anlegen</div>`;
-      }
-
-      // Water name
-      const waterName = nearest.water ? (nearest.water.longname || nearest.water.shortname || '') : '';
-      const levelClass = currentCm < 80 ? 'pegel-low' : currentCm > 500 ? 'pegel-high' : '';
-
-      // Save to state
-      state.lastPegel = { name: nearest.longname, water: waterName, value: currentCm, trend: trendLabel, dist: distKm, ts: Date.now() };
-      save();
-
-      card.innerHTML = `
-        <div class="pegel-header">
-          <div>
-            <div class="pegel-name">${nearest.longname}</div>
-            <div class="pegel-river">${waterName} · ${distKm} km entfernt</div>
-          </div>
-          <div>
-            <div class="pegel-value ${levelClass}">${currentCm}</div>
-            <div class="pegel-unit">cm über PN</div>
-          </div>
-        </div>
-        <div class="pegel-grid">
-          <div class="pegel-stat">
-            <div class="pegel-stat-label">Tendenz</div>
-            <div class="pegel-stat-val" style="font-size:18px">${trend}</div>
-          </div>
-          <div class="pegel-stat">
-            <div class="pegel-stat-label">Änderung</div>
-            <div class="pegel-stat-val" style="color:${trendColor};font-size:11px">${trendLabel}</div>
-          </div>
-          <div class="pegel-stat">
-            <div class="pegel-stat-label">Entfernung</div>
-            <div class="pegel-stat-val">${distKm} km</div>
-          </div>
-        </div>
-        ${tideHTML}
-        ${warnHTML}
-        <button class="weather-refresh" style="margin-top:12px" onclick="fetchPegel()">↻ Aktualisieren</button>
-      `;
-
     } catch(e) {
-      card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">⚠️ Pegelstand nicht verfügbar<br><span style="font-size:10px">Internetverbindung prüfen</span></div>
-        <button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
+      // Gezeitendaten nicht verfügbar — kein tideHTML
+    }
+
+    // Warnungen
+    let warnHTML = '';
+    if (currentCm < 50)  warnHTML = `<div class="pegel-warn">⚠️ Niedriger Wasserstand — Grundberührung möglich</div>`;
+    if (currentCm > 600) warnHTML = `<div class="pegel-warn">⚠️ Hochwasser — Vorsicht beim Anlegen</div>`;
+
+    const waterName  = station.water ? (station.water.longname || station.water.shortname || '') : '';
+    const levelClass = currentCm < 80 ? 'pegel-low' : currentCm > 500 ? 'pegel-high' : '';
+    const pinLabel   = pinnedStation ? `<button onclick="unpinPegel()" style="background:none;border:1px solid rgba(244,162,97,0.4);color:var(--amber);border-radius:8px;padding:4px 10px;font-size:10px;font-family:'Space Mono',monospace;cursor:pointer;margin-top:6px">📌 Fixierung aufheben</button>` : `<button onclick="openPegelModal()" style="background:none;border:1px solid var(--card-border);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:10px;font-family:'Space Mono',monospace;cursor:pointer;margin-top:6px">🔍 Anderen wählen</button>`;
+
+    state.lastPegel = { name: station.longname, water: waterName, value: currentCm, trend: trendLabel, dist: distKm, ts: Date.now() };
+    save();
+
+    card.innerHTML = `
+      <div class="pegel-header">
+        <div>
+          <div class="pegel-name">${station.longname}</div>
+          <div class="pegel-river">${waterName}${distKm ? ' · ' + distKm + ' km' : ''}</div>
+          ${pinLabel}
+        </div>
+        <div>
+          <div class="pegel-value ${levelClass}">${currentCm}</div>
+          <div class="pegel-unit">cm über PN</div>
+        </div>
+      </div>
+      <div class="pegel-grid">
+        <div class="pegel-stat"><div class="pegel-stat-label">Tendenz</div><div class="pegel-stat-val" style="font-size:18px">${trend}</div></div>
+        <div class="pegel-stat"><div class="pegel-stat-label">Änderung</div><div class="pegel-stat-val" style="color:${trendColor};font-size:11px">${trendLabel}</div></div>
+        <div class="pegel-stat"><div class="pegel-stat-label">Entfernung</div><div class="pegel-stat-val">${distKm || '—'} km</div></div>
+      </div>
+      ${tideHTML}
+      ${warnHTML}
+      <button class="weather-refresh" style="margin-top:12px" onclick="fetchPegel()">↻ Aktualisieren</button>
+    `;
+  } catch(e) {
+    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">⚠️ Pegelstand nicht verfügbar<br><span style="font-size:10px">Internetverbindung prüfen</span></div><button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
+  }
+}
+
+async function fetchPegel() {
+  const card = document.getElementById('pegel-card');
+
+  // Gepinnten Pegel direkt laden — kein GPS nötig
+  if (pinnedStation) {
+    card.innerHTML = `<div class="pegel-loading">📌 Lade fixierten Pegel...</div>`;
+    await fetchPegelForStation(pinnedStation, null);
+    return;
+  }
+
+  // Automatisch nächsten Pegel suchen
+  if (!navigator.geolocation) {
+    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht verfügbar</div>`;
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    card.innerHTML = `<div class="pegel-loading">🔍 Suche nächsten Pegel...</div>`;
+    try {
+      const stations = await loadAllStations();
+      let nearest = null, minDist = Infinity;
+      for (const st of stations) {
+        const d = haversineKm(lat, lng, st.latitude, st.longitude);
+        if (d < minDist) { minDist = d; nearest = st; }
+      }
+      if (!nearest) throw new Error('Keine Station gefunden');
+      await fetchPegelForStation(nearest, minDist.toFixed(1));
+    } catch(e) {
+      card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">⚠️ Pegelstand nicht verfügbar</div><button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
     }
   }, () => {
     card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht freigegeben<br><span style="font-size:10px">Bitte Standort in den Browsereinstellungen erlauben</span></div>`;
   }, { enableHighAccuracy: false, timeout: 10000 });
+}
+
+// ---- PEGEL SUCHE MODAL ----
+async function openPegelModal() {
+  document.getElementById('pegel-modal').classList.add('open');
+  const input = document.getElementById('pegel-search-input');
+  const list  = document.getElementById('pegel-results-list');
+  input.value = '';
+  list.innerHTML = `<div class="pegel-loading">⏳ Stationen werden geladen...</div>`;
+
+  const stations = await loadAllStations();
+
+  // Alle Stationen alphabetisch sortiert anzeigen oder gefiltert
+  function renderResults(query) {
+    const q = query.toLowerCase().trim();
+    const filtered = q
+      ? stations.filter(s =>
+          s.longname.toLowerCase().includes(q) ||
+          (s.water && (s.water.longname || '').toLowerCase().includes(q))
+        ).slice(0, 30)
+      : stations.slice(0, 20);
+
+    if (!filtered.length) {
+      list.innerHTML = `<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px">Kein Pegel gefunden</div>`;
+      return;
+    }
+    list.innerHTML = filtered.map(s => {
+      const water = s.water ? (s.water.longname || s.water.shortname || '') : '';
+      return `<div class="pegel-result-item" onclick="pinPegel('${s.uuid}')">
+        <div class="pegel-result-name">${s.longname}</div>
+        <div class="pegel-result-water">${water}</div>
+      </div>`;
+    }).join('');
+  }
+
+  renderResults('');
+  input.oninput = () => renderResults(input.value);
+  input.focus();
+}
+
+async function pinPegel(uuid) {
+  const stations = await loadAllStations();
+  pinnedStation = stations.find(s => s.uuid === uuid);
+  document.getElementById('pegel-pin-badge').style.display = 'inline-flex';
+  closePegelModal();
+  toast(`📌 ${pinnedStation.longname} fixiert`);
+  fetchPegel();
+}
+
+function unpinPegel() {
+  pinnedStation = null;
+  document.getElementById('pegel-pin-badge').style.display = 'none';
+  toast('📍 Automatisch — nächster Pegel');
+  fetchPegel();
+}
+
+function closePegelModal() {
+  document.getElementById('pegel-modal').classList.remove('open');
 }
 
 // ---- NOTES MODAL ----
@@ -1629,13 +2058,25 @@ function exportTripPDF(idx) {
 <div class="header">
   <div>
     <div class="logo">⚓ BOOT<span>LOGBUCH</span></div>
-    <div style="font-size:11px;color:#7a9bb5;margin-top:4px">Offizielles Fahrtenbuch</div>
+    <div style="font-size:11px;color:#7a9bb5;margin-top:4px">Offizielles Fahrtenbuch · ${t.boatname || 'Unbekanntes Boot'}${t.registration ? ' · ' + t.registration : ''}</div>
   </div>
   <div style="text-align:right">
     <div class="trip-title">${t.name}</div>
     <div class="trip-date">📅 ${formatDate(t.start)} · ${formatTime(t.start)} – ${formatTime(t.end)}</div>
   </div>
 </div>
+
+${(t.boatname || t.registration || t.skipper || t.departure || t.destination) ? `
+<div class="section">
+  <div class="section-title">Fahrzeug & Führung</div>
+  <div class="grid">
+    ${t.boatname ? `<div class="stat-box"><div class="stat-label">Bootsname</div><div class="stat-val" style="font-size:14px">${t.boatname}</div></div>` : ''}
+    ${t.registration ? `<div class="stat-box"><div class="stat-label">Kennzeichen</div><div class="stat-val" style="font-size:14px">${t.registration}</div></div>` : ''}
+    ${t.skipper ? `<div class="stat-box"><div class="stat-label">Bootsführer</div><div class="stat-val" style="font-size:14px">${t.skipper}</div></div>` : ''}
+    ${t.departure ? `<div class="stat-box"><div class="stat-label">Abfahrtsort</div><div class="stat-val" style="font-size:14px">${t.departure}</div></div>` : ''}
+    ${t.destination ? `<div class="stat-box"><div class="stat-label">Zielort</div><div class="stat-val" style="font-size:14px">${t.destination}</div></div>` : ''}
+  </div>
+</div>` : ''}
 
 <div class="section">
   <div class="section-title">Fahrtdaten</div>
@@ -1645,7 +2086,7 @@ function exportTripPDF(idx) {
     <div class="stat-box"><div class="stat-label">Ø Geschwindigkeit</div><div class="stat-val">${stats.avgKts.toFixed(1)} kts</div></div>
     <div class="stat-box"><div class="stat-label">Max. Geschwindigkeit</div><div class="stat-val">${stats.maxKts.toFixed(1)} kts</div></div>
     <div class="stat-box"><div class="stat-label">Kraftstoff Start</div><div class="stat-val">${t.fuelStart}%</div></div>
-    <div class="stat-box"><div class="stat-label">Kraftstoff Ende</div><div class="stat-val">${t.fuelEnd}%</div></div>
+    <div class="stat-box"><div class="stat-label">Kraftstoff Ende</div><div class="stat-val">${t.fuelEnd}%${t.fuelLiters ? ' (≈' + t.fuelLiters + ' L)' : ''}</div></div>
   </div>
 </div>
 
@@ -1727,9 +2168,18 @@ ${t.track && t.track.length > 0 ? `
 // ---- INIT ----
 updateUI();
 renderTrips();
+updateBoatHeader();
 if (state.tripActive) startGPS();
 fetchWeather();
 fetchPegel();
+
+// Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
+if (!settings.boatname) {
+  setTimeout(() => {
+    toast('⚙️ Bitte Bootsdaten einrichten');
+    setTimeout(openSettings, 1500);
+  }, 1000);
+}
 
 // Pegelstand alle 15 Minuten automatisch aktualisieren (sync mit Pegelonline)
 const PEGEL_INTERVAL = 15 * 60 * 1000;
