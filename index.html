@@ -1693,18 +1693,18 @@ async function fetchPegelForStation(station, distKm) {
     const currentCm = meas.value;
 
     // Trend
-    let trend = '➡️', trendColor = 'var(--muted)', trendLabel = 'Gleichbleibend';
+    let trend = '→', trendColor = 'var(--muted)', trendLabel = 'Gleichbleibend';
     if (tsData && tsData.length >= 3) {
       const recent = tsData.slice(-6);
       const diff = recent[recent.length-1].value - recent[0].value;
-      if (diff > 3)       { trend = '📈'; trendColor = 'var(--teal)';  trendLabel = `+${diff.toFixed(0)} cm (steigend)`; }
-      else if (diff < -3) { trend = '📉'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
+      if (diff > 3)       { trend = '↗'; trendColor = 'var(--teal)';  trendLabel = `+${diff.toFixed(0)} cm (steigend)`; }
+      else if (diff < -3) { trend = '↘'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
     }
 
-    // Gezeiten — 24h Daten für zuverlässige Extrema
+    // Gezeiten — 48h Daten für zuverlässige Extrema
     let tideHTML = '';
     try {
-      const tsUrl24 = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P1D`;
+      const tsUrl24 = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P2D`;
       const tsRes24 = await fetch(tsUrl24);
       const tsData24 = await tsRes24.json();
 
@@ -1712,49 +1712,45 @@ async function fetchPegelForStation(station, distKm) {
         const vals  = tsData24.map(d => d.value);
         const times = tsData24.map(d => new Date(d.timestamp));
 
-        // Glättung: 3-Punkte-Mittelwert um GPS-Rauschen zu eliminieren
-        const smooth = vals.map((v, i) =>
-          i === 0 || i === vals.length-1 ? v :
-          (vals[i-1] + v + vals[i+1]) / 3
-        );
+        // Glättung: 5-Punkte-Mittelwert
+        const smooth = vals.map((v, i) => {
+          const from = Math.max(0, i-2), to = Math.min(vals.length-1, i+2);
+          const slice = vals.slice(from, to+1);
+          return slice.reduce((a,b) => a+b, 0) / slice.length;
+        });
 
-        // Extrema suchen mit Mindestabstand von 2 Stunden (Gezeitenzyklus ~12h)
-        const minSepMs = 2 * 60 * 60 * 1000;
+        const range = Math.max(...vals) - Math.min(...vals);
+        const minDiff = Math.max(50, range * 0.20);
+        const minSepMs = 2 * 60 * 60 * 1000;   // 2h zwischen Extrema
+        const minTimeSepMs = 60 * 60 * 1000;    // 1h zwischen HW und NW
+
         let allMax = [], allMin = [];
-
         for (let i = 2; i < smooth.length - 2; i++) {
           const isMax = smooth[i] > smooth[i-1] && smooth[i] > smooth[i-2] &&
                         smooth[i] > smooth[i+1] && smooth[i] > smooth[i+2];
           const isMin = smooth[i] < smooth[i-1] && smooth[i] < smooth[i-2] &&
                         smooth[i] < smooth[i+1] && smooth[i] < smooth[i+2];
-
           if (isMax) {
-            // Nur wenn genug Abstand zum letzten Maximum
-            if (!allMax.length || times[i] - allMax[allMax.length-1].t >= minSepMs) {
+            if (!allMax.length || times[i] - allMax[allMax.length-1].t >= minSepMs)
               allMax.push({ v: Math.round(vals[i]), t: times[i] });
-            } else if (vals[i] > allMax[allMax.length-1].v) {
-              // Höheres Maximum ersetzt schwächeres in der Nähe
+            else if (vals[i] > allMax[allMax.length-1].v)
               allMax[allMax.length-1] = { v: Math.round(vals[i]), t: times[i] };
-            }
           }
           if (isMin) {
-            if (!allMin.length || times[i] - allMin[allMin.length-1].t >= minSepMs) {
+            if (!allMin.length || times[i] - allMin[allMin.length-1].t >= minSepMs)
               allMin.push({ v: Math.round(vals[i]), t: times[i] });
-            } else if (vals[i] < allMin[allMin.length-1].v) {
+            else if (vals[i] < allMin[allMin.length-1].v)
               allMin[allMin.length-1] = { v: Math.round(vals[i]), t: times[i] };
-            }
           }
         }
 
-        const lastMax = allMax.length ? allMax[allMax.length-1] : null;
-        const lastMin = allMin.length ? allMin[allMin.length-1] : null;
-
-        // Dynamische Validierung:
-        // 1. Mindestunterschied = 20% des Gesamtwertebereichs der 24h-Daten
-        // 2. Mindestabstand in Zeit = 1 Stunde zwischen HW und NW
-        const range = Math.max(...vals) - Math.min(...vals);
-        const minDiff = Math.max(50, range * 0.20); // mind. 50cm, oder 20% des Tidenhubs
-        const minTimeSepMs = 60 * 60 * 1000; // mind. 1 Stunde Abstand
+        // Nur Extrema die plausibel zum aktuellen Stand passen:
+        // HW muss höher als aktueller Wert ODER in letzten 6h liegen
+        // NW muss tiefer als aktueller Wert ODER in letzten 6h liegen
+        const now = Date.now();
+        const sixH = 6 * 60 * 60 * 1000;
+        const lastMax = allMax.filter(p => p.v >= currentCm * 0.85 || (now - p.t.getTime()) < sixH).pop() || null;
+        const lastMin = allMin.filter(p => p.v <= currentCm * 1.15 || (now - p.t.getTime()) < sixH).pop() || null;
 
         let validPair = false;
         if (lastMax && lastMin) {
@@ -1766,11 +1762,8 @@ async function fetchPegelForStation(station, distKm) {
         const fmt = t => t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
         if (lastMax || (lastMin && validPair)) {
-          // Aktueller Gezeitenstatus — nur wenn valides Paar
-          let currentTide = trend === '📈' ? '🌊 Flut' : '🌀 Ebbe';
-          if (validPair) {
-            currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
-          }
+          let currentTide = trend === '↗' ? '🌊 Flut' : '🌀 Ebbe';
+          if (validPair) currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
 
           tideHTML = `
             <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND</div>
@@ -1792,7 +1785,7 @@ async function fetchPegelForStation(station, distKm) {
         }
       }
     } catch(e) {
-      // Gezeitendaten nicht verfügbar — kein tideHTML
+      // Gezeitendaten nicht verfügbar
     }
 
     // Warnungen
@@ -1819,7 +1812,7 @@ async function fetchPegelForStation(station, distKm) {
         </div>
       </div>
       <div class="pegel-grid">
-        <div class="pegel-stat"><div class="pegel-stat-label">Tendenz</div><div class="pegel-stat-val" style="font-size:18px">${trend}</div></div>
+        <div class="pegel-stat"><div class="pegel-stat-label">Tendenz</div><div class="pegel-stat-val" style="font-size:28px;color:${trendColor}">${trend}</div></div>
         <div class="pegel-stat"><div class="pegel-stat-label">Änderung</div><div class="pegel-stat-val" style="color:${trendColor};font-size:11px">${trendLabel}</div></div>
         <div class="pegel-stat"><div class="pegel-stat-label">Entfernung</div><div class="pegel-stat-val">${distKm || '—'} km</div></div>
       </div>
