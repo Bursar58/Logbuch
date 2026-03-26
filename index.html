@@ -1105,9 +1105,9 @@ function updatePositionDisplay(lat, lng, acc, speedMs, heading) {
 
   state.lastLat = lat; state.lastLng = lng;
 
-  // Wetter und Pegelstand beim ersten GPS-Fix automatisch laden
-  if (!state._weatherLoaded) {
-    state._weatherLoaded = true;
+  // Wetter und Pegelstand beim ersten GPS-Fix automatisch laden (Session-Flag, nicht gespeichert)
+  if (!window._weatherLoaded) {
+    window._weatherLoaded = true;
     fetchWeather();
     fetchPegel();
   }
