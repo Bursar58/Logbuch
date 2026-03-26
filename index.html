@@ -2330,24 +2330,26 @@ function importAllData(input) {
   reader.readAsText(file);
 }
 
-// ---- INIT ----
-updateUI();
-renderTrips();
-updateBoatHeader();
-if (state.tripActive) startGPS();
-fetchWeather();
-fetchPegel();
+// ---- INIT via window.onload (wie Regenkarte) ----
+window.onload = () => {
+  updateUI();
+  renderTrips();
+  updateBoatHeader();
+  if (state.tripActive) startGPS();
+  fetchWeather();
+  fetchPegel();
 
-// GPS sofort beim Start anfordern — ohne Warten auf Klick
-updatePosition();
+  // GPS sofort anfordern — Browser ist jetzt vollständig bereit
+  updatePosition();
 
-// Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
-if (!settings.boatname) {
-  setTimeout(() => {
-    toast('⚙️ Bitte Bootsdaten einrichten');
-    setTimeout(openSettings, 1500);
-  }, 1000);
-}
+  // Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
+  if (!settings.boatname) {
+    setTimeout(() => {
+      toast('⚙️ Bitte Bootsdaten einrichten');
+      setTimeout(openSettings, 1500);
+    }, 1000);
+  }
+};
 
 // Pegelstand alle 15 Minuten automatisch aktualisieren (sync mit Pegelonline)
 const PEGEL_INTERVAL = 15 * 60 * 1000;
