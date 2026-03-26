@@ -35,53 +35,15 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- SERVICE WORKER registration -->
+<!-- SERVICE WORKER: alle vorhandenen deregistrieren -->
 <script>
 if ('serviceWorker' in navigator) {
-  const swCode = `
-const CACHE = 'bootlog-v3';
-const PRECACHE = [
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-  'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap',
-  'https://a.tile.openstreetmap.org/10/549/335.png',
-];
-
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(() => {}))
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', e => {
-  // Cache-first for tiles and static assets, network-first for API calls
-  const url = e.request.url;
-  if (url.includes('pegelonline') || url.includes('open-meteo') || url.includes('openseamap')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-  } else {
-    e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-        if (resp && resp.status === 200) {
-          const clone = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return resp;
-      }))
-    );
-  }
-});
-  `;
-  const blob = new Blob([swCode], {type: 'application/javascript'});
-  const swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl, {scope: '/'}).catch(() => {});
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  });
+  caches.keys().then(keys => {
+    keys.forEach(key => caches.delete(key));
+  });
 }
 </script>
 <style>
@@ -565,11 +527,6 @@ self.addEventListener('fetch', e => {
 </style>
 </head>
 <body>
-
-<!-- OFFLINE BANNER -->
-<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#e63946;color:#fff;text-align:center;padding:8px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px">
-  📵 OFFLINE — Karte & Live-Daten nicht verfügbar
-</div>
 
 <!-- INSTALL PROMPT -->
 <div id="install-banner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:998;background:linear-gradient(135deg,#0d1f3c,#1a3458);border:1px solid rgba(0,180,216,0.4);border-radius:14px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
@@ -2395,16 +2352,6 @@ setInterval(() => {
     btn.textContent = `↻ Aktualisierung in ${min}:${sec.toString().padStart(2,'0')}`;
   }
 }, 1000);
-
-// ---- OFFLINE DETECTION ----
-function updateOnlineStatus() {
-  document.getElementById('offline-banner').style.display = navigator.onLine ? 'none' : 'block';
-  document.querySelector('nav').style.marginTop = '0';
-  document.querySelectorAll('.page').forEach(p => p.style.paddingBottom = navigator.onLine ? '80px' : '80px');
-}
-window.addEventListener('online', updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-updateOnlineStatus();
 
 // ---- PWA INSTALL PROMPT ----
 let deferredInstallPrompt = null;
