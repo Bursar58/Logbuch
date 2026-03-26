@@ -1081,6 +1081,13 @@ function updatePositionDisplay(lat, lng, acc, speedMs, heading) {
   document.getElementById('pos-accuracy').textContent = acc ? `± ${Math.round(acc)} m` : '± — m';
 
   state.lastLat = lat; state.lastLng = lng;
+
+  // Wetter und Pegelstand beim ersten GPS-Fix automatisch laden
+  if (!state._weatherLoaded) {
+    state._weatherLoaded = true;
+    fetchWeather();
+    fetchPegel();
+  }
 }
 
 // Globale GPS Optionen
@@ -1792,40 +1799,60 @@ function marineAlert(weather) {
 
 async function fetchWeather() {
   const card = document.getElementById('weather-card');
-  if (!navigator.geolocation) {
-    card.innerHTML = `<div class="weather-error">📍 Standort auf diesem Gerät nicht verfügbar</div>`;
+  card.innerHTML = `<div class="weather-loading">🌐 Wetterdaten werden geladen...</div>`;
+
+  // Nutze bereits bekannte Position aus state — kein neuer GPS-Aufruf nötig
+  let lat = state.lastLat;
+  let lng = state.lastLng;
+
+  // Falls noch keine Position bekannt — kurz warten und nochmal versuchen
+  if (!lat || !lng) {
+    if (!navigator.geolocation) {
+      card.innerHTML = `<div class="weather-error">📍 Standort nicht verfügbar</div>`;
+      return;
+    }
+    card.innerHTML = `<div class="weather-loading">📡 Warte auf GPS Position...</div>`;
+    // Warte max 5 Sekunden auf eine Position vom watchPosition Watcher
+    await new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (state.lastLat && state.lastLng) {
+          lat = state.lastLat;
+          lng = state.lastLng;
+          clearInterval(check);
+          resolve();
+        }
+      }, 500);
+      setTimeout(() => { clearInterval(check); resolve(); }, 5000);
+    });
+  }
+
+  if (!lat || !lng) {
+    card.innerHTML = `<div class="weather-error">📍 Noch kein GPS Fix — bitte ↻ Orten tippen<br><span style="font-size:10px">Dann Wetter nochmal laden</span></div><button class="weather-refresh" onclick="fetchWeather()">↻ Erneut versuchen</button>`;
     return;
   }
-  card.innerHTML = `<div class="weather-loading">📡 Standort wird ermittelt...<br><span style="font-size:10px;display:block;margin-top:4px">Bitte Standortzugriff erlauben</span></div>`;
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const { latitude: lat, longitude: lng } = pos.coords;
-    document.getElementById('gps-coords').textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  card.innerHTML = `<div class="weather-loading">🌐 Wetterdaten werden geladen...</div>`;
 
-    card.innerHTML = `<div class="weather-loading">🌐 Wetterdaten werden geladen...</div>`;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=relative_humidity_2m,apparent_temperature,precipitation_probability,windgusts_10m,visibility&forecast_days=1&timezone=auto`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const w = data.current_weather;
+    const hr = data.hourly;
+    const hrIdx = new Date().getHours();
 
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=relative_humidity_2m,apparent_temperature,precipitation_probability,windgusts_10m,visibility&forecast_days=1&timezone=auto`;
-      const res = await fetch(url);
-      const data = await res.json();
-      const w = data.current_weather;
-      const hr = data.hourly;
-      // Find closest hourly index
-      const now = new Date();
-      const hrIdx = now.getHours();
+    const [icon, desc] = WMO_CODES[w.weathercode] || ['🌡️','Unbekannt'];
+    const tempC = Math.round(w.temperature);
+    const windMs = w.windspeed / 3.6;
+    const windKts = (windMs * 1.944).toFixed(0);
+    const gust = hr.windgusts_10m ? (hr.windgusts_10m[hrIdx] / 3.6 * 1.944).toFixed(0) : '—';
+    const humid = hr.relative_humidity_2m ? hr.relative_humidity_2m[hrIdx] : '—';
+    const precip = hr.precipitation_probability ? hr.precipitation_probability[hrIdx] : '—';
+    const vis = hr.visibility ? (hr.visibility[hrIdx] / 1000).toFixed(1) : '—';
+    const bft = beaufortDesc(windMs);
+    const wdir = windDirArrow(w.winddirection);
 
-      const [icon, desc] = WMO_CODES[w.weathercode] || ['🌡️','Unbekannt'];
-      const tempC = Math.round(w.temperature);
-      const windMs = w.windspeed / 3.6;
-      const windKts = (windMs * 1.944).toFixed(0);
-      const gust = hr.windgusts_10m ? (hr.windgusts_10m[hrIdx] / 3.6 * 1.944).toFixed(0) : '—';
-      const humid = hr.relative_humidity_2m ? hr.relative_humidity_2m[hrIdx] : '—';
-      const precip = hr.precipitation_probability ? hr.precipitation_probability[hrIdx] : '—';
-      const vis = hr.visibility ? (hr.visibility[hrIdx] / 1000).toFixed(1) : '—';
-      const bft = beaufortDesc(windMs);
-      const wdir = windDirArrow(w.winddirection);
-
-      const alerts = marineAlert({ windspeed_10m: windMs, windgusts_10m: hr.windgusts_10m ? hr.windgusts_10m[hrIdx]/3.6 : 0, weathercode: w.weathercode });
+    const alerts = marineAlert({ windspeed_10m: windMs, windgusts_10m: hr.windgusts_10m ? hr.windgusts_10m[hrIdx]/3.6 : 0, weathercode: w.weathercode });
 
       // Save weather to current state for logging
       state.lastWeather = { icon, desc, tempC, windKts, gust, humid, precip, vis, bft, wdir, ts: Date.now() };
@@ -1872,12 +1899,9 @@ async function fetchWeather() {
         ${alerts.map(a => `<div class="weather-alert">${a}</div>`).join('')}
         <button class="weather-refresh" onclick="fetchWeather()">↻ Aktualisieren</button>
       `;
-    } catch(e) {
-      card.innerHTML = `<div class="weather-error">⚠️ Wetter konnte nicht geladen werden<br><span style="font-size:10px">Internetverbindung prüfen</span></div><button class="weather-refresh" onclick="fetchWeather()">↻ Erneut versuchen</button>`;
-    }
-  }, () => {
-    card.innerHTML = `<div class="weather-error">📍 Standortzugriff verweigert<br><span style="font-size:10px">Standort in den Browsereinstellungen erlauben</span></div><button class="weather-refresh" onclick="fetchWeather()">↻ Erneut versuchen</button>`;
-  }, { enableHighAccuracy: false, timeout: 30000 });
+  } catch(e) {
+    card.innerHTML = `<div class="weather-error">⚠️ Wetter konnte nicht geladen werden<br><span style="font-size:10px">Internetverbindung prüfen</span></div><button class="weather-refresh" onclick="fetchWeather()">↻ Erneut versuchen</button>`;
+  }
 }
 
 // ---- PEGELSTAND ----
@@ -2045,30 +2069,28 @@ async function fetchPegel() {
     return;
   }
 
-  // Automatisch nächsten Pegel suchen
-  if (!navigator.geolocation) {
-    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht verfügbar</div>`;
+  // Nutze bereits bekannte Position aus state
+  const lat = state.lastLat;
+  const lng = state.lastLng;
+
+  if (!lat || !lng) {
+    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Warte auf GPS Fix...<br><span style="font-size:10px">↻ Orten tippen dann erneut versuchen</span></div><button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
     return;
   }
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const { latitude: lat, longitude: lng } = pos.coords;
-    card.innerHTML = `<div class="pegel-loading">🔍 Suche nächsten Pegel...</div>`;
-    try {
-      const stations = await loadAllStations();
-      let nearest = null, minDist = Infinity;
-      for (const st of stations) {
-        const d = haversineKm(lat, lng, st.latitude, st.longitude);
-        if (d < minDist) { minDist = d; nearest = st; }
-      }
-      if (!nearest) throw new Error('Keine Station gefunden');
-      await fetchPegelForStation(nearest, minDist.toFixed(1));
-    } catch(e) {
-      card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">⚠️ Pegelstand nicht verfügbar</div><button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
+  card.innerHTML = `<div class="pegel-loading">🔍 Suche nächsten Pegel...</div>`;
+  try {
+    const stations = await loadAllStations();
+    let nearest = null, minDist = Infinity;
+    for (const st of stations) {
+      const d = haversineKm(lat, lng, st.latitude, st.longitude);
+      if (d < minDist) { minDist = d; nearest = st; }
     }
-  }, () => {
-    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht freigegeben<br><span style="font-size:10px">Bitte Standort in den Browsereinstellungen erlauben</span></div>`;
-  }, { enableHighAccuracy: false, timeout: 30000 });
+    if (!nearest) throw new Error('Keine Station gefunden');
+    await fetchPegelForStation(nearest, minDist.toFixed(1));
+  } catch(e) {
+    card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">⚠️ Pegelstand nicht verfügbar</div><button class="weather-refresh" style="margin-top:8px" onclick="fetchPegel()">↻ Erneut versuchen</button>`;
+  }
 }
 
 // ---- PEGEL SUCHE MODAL ----
@@ -2443,10 +2465,8 @@ window.addEventListener('DOMContentLoaded', () => {
   renderTrips();
   updateBoatHeader();
   if (state.tripActive) startGPS();
-  fetchWeather();
-  fetchPegel();
 
-  // GPS sofort anfordern — Browser ist bereit, Berechtigung wird eingeholt
+  // GPS sofort anfordern — Wetter & Pegelstand laden nach erstem Fix automatisch
   updatePosition();
 
   // Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
