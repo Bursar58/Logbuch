@@ -600,6 +600,20 @@ if ('serviceWorker' in navigator) {
     <button class="settings-save-btn" style="background:linear-gradient(135deg,#1a1a3a,#7a5af8);margin-bottom:10px" onclick="document.getElementById('import-file').click()">⬆ DATEN IMPORTIEREN</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importAllData(this)">
     <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:10px;line-height:1.5">Export speichert alle Fahrten, Einstellungen<br>und Ereignisse als JSON-Datei</div>
+    <hr class="settings-divider">
+    <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:10px">SPEICHER</div>
+    <div id="storage-info" style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--muted)">Genutzt</span>
+        <span id="storage-used" style="font-family:'Space Mono',monospace;font-size:12px;color:var(--teal)">—</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.07);border-radius:4px;height:8px;overflow:hidden">
+        <div id="storage-bar" style="height:100%;border-radius:4px;background:var(--teal);width:0%;transition:width 0.4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px" id="storage-detail">— Fahrten · — Ereignisse</div>
+    </div>
+    <button class="settings-save-btn" style="background:linear-gradient(135deg,#3a1a1a,#e63946);margin-bottom:10px" onclick="cleanupOldTracks()">🗑 GPS-TRACKS KOMPRIMIEREN</button>
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:10px;line-height:1.5">Kürzt GPS-Tracks älterer Fahrten auf max. 100 Punkte<br>Fahrtdaten bleiben vollständig erhalten</div>
     <button class="modal-close" onclick="closeSettings()">✕ Schließen</button>
   </div>
 </div>
@@ -884,6 +898,78 @@ function openSettings() {
   document.getElementById('set-license').value      = settings.license;
   document.getElementById('set-tankvol').value      = settings.tankVol || '';
   document.getElementById('settings-modal').classList.add('open');
+  updateStorageInfo();
+}
+
+function updateStorageInfo() {
+  try {
+    // Speichernutzung berechnen
+    let total = 0;
+    for (const key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        total += localStorage[key].length * 2; // UTF-16 = 2 bytes pro Zeichen
+      }
+    }
+    const usedKB = (total / 1024).toFixed(1);
+    const usedMB = (total / 1024 / 1024).toFixed(2);
+    const pct    = Math.min(100, (total / (5 * 1024 * 1024)) * 100);
+
+    document.getElementById('storage-used').textContent = usedKB > 1024 ? `${usedMB} MB / 5 MB` : `${usedKB} KB / 5000 KB`;
+    document.getElementById('storage-bar').style.width = pct + '%';
+    document.getElementById('storage-bar').style.background =
+      pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--teal)';
+
+    const tripCount  = state.trips.length;
+    const trackPts   = state.trips.reduce((s, t) => s + (t.track ? t.track.length : 0), 0);
+    const evCount    = logEntries.length;
+    document.getElementById('storage-detail').textContent =
+      `${tripCount} Fahrten · ${trackPts} GPS-Punkte · ${evCount} Ereignisse`;
+
+    // Warnung wenn fast voll
+    if (pct > 80) {
+      document.getElementById('storage-detail').style.color = 'var(--red)';
+      document.getElementById('storage-detail').textContent += ' ⚠️ Speicher fast voll!';
+    }
+  } catch(e) {}
+}
+
+function cleanupOldTracks() {
+  const MAX_PTS = 100; // Max Punkte pro alter Fahrt
+  const KEEP_FULL = 3; // Letzte 3 Fahrten behalten vollständig
+
+  let totalBefore = 0, totalAfter = 0;
+  let compressed = 0;
+
+  state.trips.forEach((trip, idx) => {
+    if (!trip.track || trip.track.length === 0) return;
+    totalBefore += trip.track.length;
+
+    // Letzte KEEP_FULL Fahrten unberührt lassen
+    if (idx < KEEP_FULL) {
+      totalAfter += trip.track.length;
+      return;
+    }
+
+    // Ältere Fahrten: gleichmäßig auf MAX_PTS reduzieren
+    if (trip.track.length > MAX_PTS) {
+      const step = trip.track.length / MAX_PTS;
+      const reduced = [];
+      // Immer ersten und letzten Punkt behalten
+      reduced.push(trip.track[0]);
+      for (let i = 1; i < MAX_PTS - 1; i++) {
+        reduced.push(trip.track[Math.round(i * step)]);
+      }
+      reduced.push(trip.track[trip.track.length - 1]);
+      trip.track = reduced;
+      compressed++;
+    }
+    totalAfter += trip.track.length;
+  });
+
+  save();
+  updateStorageInfo();
+  const saved = totalBefore - totalAfter;
+  toast(`✅ ${compressed} Tracks komprimiert · ${saved} Punkte entfernt`);
 }
 
 function closeSettings() {
@@ -986,61 +1072,80 @@ function updatePositionDisplay(lat, lng, acc, speedMs, heading) {
   state.lastLat = lat; state.lastLng = lng;
 }
 
+// Globale GPS Optionen
+const geoOptions = {
+  enableHighAccuracy: true,
+  timeout: 30000,
+  maximumAge: 0
+};
+
+let positionWatchId = null;
+
+function onPositionSuccess(pos) {
+  updatePositionDisplay(
+    pos.coords.latitude,
+    pos.coords.longitude,
+    pos.coords.accuracy,
+    pos.coords.speed,
+    pos.coords.heading
+  );
+  setGPSStatus('active');
+}
+
+function onPositionError(err) {
+  const msgs = {
+    1: '⚠️ Standort verweigert — In Einstellungen erlauben',
+    2: '⚠️ Kein GPS Signal — Ins Freie gehen',
+    3: '⚠️ GPS Timeout — Signal schwach'
+  };
+  const msg = msgs[err.code] || '⚠️ GPS Fehler: ' + err.message;
+  document.getElementById('pos-accuracy').textContent = msg;
+  document.getElementById('gps-status-text').textContent = msg;
+  setGPSStatus('error');
+}
+
 function updatePosition() {
-  if (!navigator.geolocation) {
+  if (!('geolocation' in navigator)) {
     document.getElementById('pos-accuracy').textContent = '⚠️ GPS nicht verfügbar';
-    document.getElementById('gps-status-text').textContent = 'GPS nicht verfügbar';
     setGPSStatus('error');
     return;
   }
 
-  document.getElementById('pos-accuracy').textContent = '⏳ Standort wird gesucht...';
+  // Nutzer sofort informieren dass gesucht wird
+  document.getElementById('pos-lat-dec').textContent = 'Satelliten werden gesucht...';
+  document.getElementById('pos-lng-dec').textContent = '';
+  document.getElementById('pos-lat-dms').textContent = '';
+  document.getElementById('pos-lng-dms').textContent = '';
+  document.getElementById('pos-accuracy').textContent = '⏳ Bitte warten...';
   document.getElementById('gps-status-text').textContent = 'GPS wird gesucht...';
   setGPSStatus('standby');
 
-  const onSuccess = pos => {
-    updatePositionDisplay(
-      pos.coords.latitude,
-      pos.coords.longitude,
-      pos.coords.accuracy,
-      pos.coords.speed,
-      pos.coords.heading
-    );
-    setGPSStatus('active');
-    setTimeout(() => { if (!state.tripActive) setGPSStatus('standby'); }, 3000);
-  };
+  // Alten Watcher stoppen
+  if (positionWatchId !== null) {
+    navigator.geolocation.clearWatch(positionWatchId);
+  }
 
-  const onError = err => {
-    const msgs = {
-      1: '⚠️ Standort verweigert — Bitte in Einstellungen erlauben',
-      2: '⚠️ Kein GPS Signal — Bitte ins Freie gehen',
-      3: '⚠️ GPS Timeout — Erneut tippen'
-    };
-    const msg = msgs[err.code] || '⚠️ GPS Fehler: ' + err.message;
-    document.getElementById('pos-accuracy').textContent = msg;
-    document.getElementById('gps-status-text').textContent = msg;
-    setGPSStatus('error');
-
-    // Bei Timeout: nochmal mit niedriger Genauigkeit versuchen (Funkzelle)
-    if (err.code === 3) {
-      navigator.geolocation.getCurrentPosition(onSuccess, () => {}, {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 300000
-      });
-    }
-  };
-
-  // Erst mit hoher Genauigkeit versuchen (GPS/Satelliten)
-  navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-    enableHighAccuracy: true,
-    timeout: 30000,
-    maximumAge: 0
-  });
+  // watchPosition mit empfohlenen Optionen
+  positionWatchId = navigator.geolocation.watchPosition(
+    onPositionSuccess,
+    onPositionError,
+    geoOptions
+  );
 }
 
 // ---- SAVE ----
-function save() { localStorage.setItem('boatlog_state', JSON.stringify(state)); }
+function save() {
+  try {
+    localStorage.setItem('boatlog_state', JSON.stringify(state));
+    // Warnung bei >80% Speichernutzung
+    const total = JSON.stringify(localStorage).length * 2;
+    if (total > 4 * 1024 * 1024) {
+      toast('⚠️ Speicher fast voll — Einstellungen → Tracks komprimieren');
+    }
+  } catch(e) {
+    toast('⚠️ Speicher voll! Bitte exportieren und Tracks komprimieren.');
+  }
+}
 
 // ---- TOAST ----
 function toast(msg) {
@@ -1105,10 +1210,10 @@ function calcSpeedKnots(p1, p2) {
 }
 
 // Hybrid-Entscheidungslogik
-const DIST_TRIGGER_M   = 20;       // Distanz-Trigger: 20 Meter
-const COURSE_TRIGGER_DEG = 10;     // Kurs-Trigger: 10 Grad
-const TIME_BACKUP_MS   = 10 * 60 * 1000; // Zeit-Backup: 10 Minuten
-const JITTER_SPEED_KTS = 0.3;      // Jitter-Schutz unter 0.3 Knoten
+const DIST_TRIGGER_M   = 50;            // Distanz-Trigger: 50 Meter
+const COURSE_TRIGGER_DEG = 5;           // Kurs-Trigger: 5 Grad
+const TIME_BACKUP_MS   = 5 * 60 * 1000; // Zeit-Backup: 5 Minuten
+const JITTER_SPEED_KTS = 0.3;           // Jitter-Schutz unter 0.3 Knoten
 
 function shouldLogPoint(newPt) {
   // Erster Punkt immer speichern
@@ -1171,7 +1276,7 @@ function startGPS() {
   }, err => {
     setGPSStatus('error');
     console.warn('GPS Fehler:', err.message);
-  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
 }
 function stopGPS() {
   if (gpsWatcher) navigator.geolocation.clearWatch(gpsWatcher);
@@ -1770,7 +1875,7 @@ async function fetchWeather() {
     }
   }, () => {
     card.innerHTML = `<div class="weather-error">📍 Standortzugriff verweigert<br><span style="font-size:10px">Standort in den Browsereinstellungen erlauben</span></div><button class="weather-refresh" onclick="fetchWeather()">↻ Erneut versuchen</button>`;
-  }, { enableHighAccuracy: false, timeout: 10000 });
+  }, { enableHighAccuracy: false, timeout: 30000 });
 }
 
 // ---- PEGELSTAND ----
@@ -1961,7 +2066,7 @@ async function fetchPegel() {
     }
   }, () => {
     card.innerHTML = `<div class="pegel-loading" style="color:var(--amber)">📍 Standort nicht freigegeben<br><span style="font-size:10px">Bitte Standort in den Browsereinstellungen erlauben</span></div>`;
-  }, { enableHighAccuracy: false, timeout: 10000 });
+  }, { enableHighAccuracy: false, timeout: 30000 });
 }
 
 // ---- PEGEL SUCHE MODAL ----
@@ -2330,8 +2435,8 @@ function importAllData(input) {
   reader.readAsText(file);
 }
 
-// ---- INIT via window.onload (wie Regenkarte) ----
-window.onload = () => {
+// ---- INIT via DOMContentLoaded (schneller als window.onload) ----
+window.addEventListener('DOMContentLoaded', () => {
   updateUI();
   renderTrips();
   updateBoatHeader();
@@ -2339,7 +2444,7 @@ window.onload = () => {
   fetchWeather();
   fetchPegel();
 
-  // GPS sofort anfordern — Browser ist jetzt vollständig bereit
+  // GPS sofort anfordern — Browser ist bereit, Berechtigung wird eingeholt
   updatePosition();
 
   // Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
@@ -2349,7 +2454,7 @@ window.onload = () => {
       setTimeout(openSettings, 1500);
     }, 1000);
   }
-};
+});
 
 // Pegelstand alle 15 Minuten automatisch aktualisieren (sync mit Pegelonline)
 const PEGEL_INTERVAL = 15 * 60 * 1000;
