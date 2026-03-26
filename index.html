@@ -1029,6 +1029,17 @@ function confirmEndTrip() {
   endTrip();
 }
 
+// ---- GPS STATUS ----
+function setGPSStatus(status) {
+  const dot  = document.getElementById('gps-dot');
+  const text = document.getElementById('gps-status-text');
+  if (!dot || !text) return;
+  dot.className = 'gps-dot ' + status;
+  if (status === 'active')  text.textContent = 'GPS OK';
+  if (status === 'standby') text.textContent = 'GPS Standby';
+  if (status === 'error')   text.textContent = 'GPS Fehler';
+}
+
 // ---- POSITION DISPLAY ----
 function decToDMS(deg, isLat) {
   const d = Math.floor(Math.abs(deg));
@@ -1732,15 +1743,6 @@ function showPage(id) {
     document.getElementById('fuel-bar-dep').style.width = state.fuel+'%';
   }
 }
-
-// ---- GPS LOCATE ----
-document.getElementById('gps-coords').onclick = function() {
-  if (!navigator.geolocation) { toast('GPS nicht verfügbar'); return; }
-  navigator.geolocation.getCurrentPosition(pos => {
-    this.textContent = `📍 ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
-    toast('📍 Standort aktualisiert');
-  }, () => toast('Standort konnte nicht ermittelt werden'));
-};
 
 // ---- WEATHER ----
 const WMO_CODES = {
