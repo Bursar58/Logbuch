@@ -39,7 +39,7 @@
 <script>
 if ('serviceWorker' in navigator) {
   const swCode = `
-const CACHE = 'bootlog-v2';
+const CACHE = 'bootlog-v3';
 const PRECACHE = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
@@ -2352,12 +2352,22 @@ if (state.tripActive) startGPS();
 fetchWeather();
 fetchPegel();
 
-// GPS beim Start anfordern sobald Seite fertig
-window.addEventListener('load', () => {
-  setTimeout(updatePosition, 500);
-});
-fetchWeather();
-fetchPegel();
+// GPS sofort anfordern
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(pos => {
+    updatePositionDisplay(
+      pos.coords.latitude,
+      pos.coords.longitude,
+      pos.coords.accuracy,
+      pos.coords.speed,
+      pos.coords.heading
+    );
+    setGPSStatus('active');
+    setTimeout(() => { if (!state.tripActive) setGPSStatus('standby'); }, 3000);
+  }, () => {
+    setGPSStatus('error');
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
 
 // Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
 if (!settings.boatname) {
