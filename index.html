@@ -713,9 +713,9 @@ self.addEventListener('fetch', e => {
   </div>
 
   <!-- GPS STATUS ROW -->
-  <div class="gps-status" id="gps-status-badge">
+  <div class="gps-status" id="gps-status-badge" onclick="updatePosition()" style="cursor:pointer">
     <div class="gps-dot standby" id="gps-dot"></div>
-    <span id="gps-status-text">GPS Standby — Fahrt starten zum Aktivieren</span>
+    <span id="gps-status-text">GPS Standby — Tippen zum Aktivieren</span>
   </div>
 
   <!-- FUEL -->
@@ -1030,8 +1030,12 @@ function updatePositionDisplay(lat, lng, acc, speedMs, heading) {
 }
 
 function updatePosition() {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) {
+    setGPSStatus('error');
+    return;
+  }
   document.getElementById('pos-accuracy').textContent = '⏳ Orten...';
+  setGPSStatus('standby');
   navigator.geolocation.getCurrentPosition(pos => {
     updatePositionDisplay(
       pos.coords.latitude,
@@ -1040,9 +1044,12 @@ function updatePosition() {
       pos.coords.speed,
       pos.coords.heading
     );
+    setGPSStatus('active');
+    setTimeout(() => { if (!state.tripActive) setGPSStatus('standby'); }, 3000);
     toast('📍 Position aktualisiert');
   }, () => {
     document.getElementById('pos-accuracy').textContent = '⚠️ Nicht verfügbar';
+    setGPSStatus('error');
   }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
@@ -2341,8 +2348,14 @@ function importAllData(input) {
 updateUI();
 renderTrips();
 updateBoatHeader();
-updatePosition();
 if (state.tripActive) startGPS();
+fetchWeather();
+fetchPegel();
+
+// GPS beim Start anfordern sobald Seite fertig
+window.addEventListener('load', () => {
+  setTimeout(updatePosition, 500);
+});
 fetchWeather();
 fetchPegel();
 
