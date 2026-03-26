@@ -988,12 +988,17 @@ function updatePositionDisplay(lat, lng, acc, speedMs, heading) {
 
 function updatePosition() {
   if (!navigator.geolocation) {
+    document.getElementById('pos-accuracy').textContent = '⚠️ GPS nicht verfügbar';
+    document.getElementById('gps-status-text').textContent = 'GPS nicht verfügbar';
     setGPSStatus('error');
     return;
   }
-  document.getElementById('pos-accuracy').textContent = '⏳ Orten...';
+
+  document.getElementById('pos-accuracy').textContent = '⏳ Standort wird gesucht...';
+  document.getElementById('gps-status-text').textContent = 'GPS wird gesucht...';
   setGPSStatus('standby');
-  navigator.geolocation.getCurrentPosition(pos => {
+
+  const onSuccess = pos => {
     updatePositionDisplay(
       pos.coords.latitude,
       pos.coords.longitude,
@@ -1003,11 +1008,35 @@ function updatePosition() {
     );
     setGPSStatus('active');
     setTimeout(() => { if (!state.tripActive) setGPSStatus('standby'); }, 3000);
-    toast('📍 Position aktualisiert');
-  }, () => {
-    document.getElementById('pos-accuracy').textContent = '⚠️ Nicht verfügbar';
+  };
+
+  const onError = err => {
+    const msgs = {
+      1: '⚠️ Standort verweigert — Bitte in Einstellungen erlauben',
+      2: '⚠️ Kein GPS Signal — Bitte ins Freie gehen',
+      3: '⚠️ GPS Timeout — Erneut tippen'
+    };
+    const msg = msgs[err.code] || '⚠️ GPS Fehler: ' + err.message;
+    document.getElementById('pos-accuracy').textContent = msg;
+    document.getElementById('gps-status-text').textContent = msg;
     setGPSStatus('error');
-  }, { enableHighAccuracy: true, timeout: 10000 });
+
+    // Bei Timeout: nochmal mit niedriger Genauigkeit versuchen (Funkzelle)
+    if (err.code === 3) {
+      navigator.geolocation.getCurrentPosition(onSuccess, () => {}, {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000
+      });
+    }
+  };
+
+  // Erst mit hoher Genauigkeit versuchen (GPS/Satelliten)
+  navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+    enableHighAccuracy: true,
+    timeout: 30000,
+    maximumAge: 0
+  });
 }
 
 // ---- SAVE ----
@@ -2309,22 +2338,8 @@ if (state.tripActive) startGPS();
 fetchWeather();
 fetchPegel();
 
-// GPS sofort anfordern
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(pos => {
-    updatePositionDisplay(
-      pos.coords.latitude,
-      pos.coords.longitude,
-      pos.coords.accuracy,
-      pos.coords.speed,
-      pos.coords.heading
-    );
-    setGPSStatus('active');
-    setTimeout(() => { if (!state.tripActive) setGPSStatus('standby'); }, 3000);
-  }, () => {
-    setGPSStatus('error');
-  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-}
+// GPS sofort beim Start anfordern — ohne Warten auf Klick
+updatePosition();
 
 // Beim ersten Start Einstellungen öffnen wenn Bootsname fehlt
 if (!settings.boatname) {
