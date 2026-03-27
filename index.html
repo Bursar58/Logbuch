@@ -1983,21 +1983,19 @@ async function fetchPegelForStation(station, distKm) {
         const times = tsData.map(d => new Date(d.timestamp));
         const n     = vals.length;
 
-        // Starke Glättung: 21-Punkte (~105 Min bei 5-Min-Auflösung)
+        // Starke Glättung: 31-Punkte (~155 Min bei 5-Min-Auflösung)
         // Entfernt alles Rauschen, bewahrt echte Gezeitenkurve
         const smooth = vals.map((_, i) => {
-          const from = Math.max(0, i - 10);
-          const to   = Math.min(n - 1, i + 10);
+          const from = Math.max(0, i - 15);
+          const to   = Math.min(n - 1, i + 15);
           let sum = 0;
           for (let j = from; j <= to; j++) sum += vals[j];
           return sum / (to - from + 1);
         });
 
-        // Einfacher Peak-Finder auf der geglätteten Kurve:
-        // Ein Punkt ist HW wenn er größer als alle 12 Punkte davor UND danach
-        // (~60 Minuten Abstand in beide Richtungen)
+        // Peak-Finder: Punkt muss Maximum in +-90 Min Fenster sein
         const dtMin  = n > 1 ? (times[1] - times[0]) / 60000 : 5;
-        const half   = Math.max(8, Math.round(60 / dtMin));
+        const half   = Math.max(12, Math.round(90 / dtMin));
         const minSep = Math.round(3 * 60 / dtMin); // 3h in Punkte
 
         const peaks = [], troughs = [];
@@ -2071,12 +2069,6 @@ async function fetchPegelForStation(station, distKm) {
         };
 
         if (lastMax || lastMin) {
-          // Gezeitenstatus: welches Ereignis liegt zuletzt?
-          let currentTide = trend === '↗' ? '🌊 Flut' : '🌀 Ebbe';
-          if (validPair) {
-            currentTide = lastMax.t > lastMin.t ? '🌀 Ebbe' : '🌊 Flut';
-          }
-
           tideHTML = `
             <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND${isFallback ? ' (Schätzwert)' : ''}</div>
             <div class="pegel-tide">
@@ -2092,8 +2084,7 @@ async function fetchPegelForStation(station, distKm) {
                 <div class="tide-time">${fmtDate(lastMin.t)}</div>
                 <div class="tide-val">${lastMin.v} cm</div>
               </div>` : ''}
-            </div>
-            <div style="margin-top:8px;font-size:12px;font-weight:600">${currentTide}</div>`;
+            </div>`;
         }
       }
     } catch(e) {
