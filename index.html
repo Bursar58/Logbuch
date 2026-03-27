@@ -1971,7 +1971,7 @@ async function fetchPegelForStation(station, distKm) {
       else if (diff < -3) { trend = '↘'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
     }
 
-    // Gezeiten — 72h Daten für zuverlässige Extrema
+    // Gezeiten — 72h Daten, Fenster-basierte Peak-Suche
     let tideHTML = '';
     try {
       const tsUrl24 = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P3D`;
@@ -1982,83 +1982,101 @@ async function fetchPegelForStation(station, distKm) {
         const vals  = tsData24.map(d => d.value);
         const times = tsData24.map(d => new Date(d.timestamp));
 
-        // Glättung: 5-Punkte-Mittelwert
-        const smooth = vals.map((v, i) => {
-          const from = Math.max(0, i-2), to = Math.min(vals.length-1, i+2);
-          const slice = vals.slice(from, to+1);
-          return slice.reduce((a,b) => a+b, 0) / slice.length;
-        });
+        // Zeitauflösung bestimmen (Minuten pro Messpunkt)
+        const dtMin = tsData24.length > 1
+          ? (times[1] - times[0]) / 60000
+          : 5;
 
-        const range = Math.max(...vals) - Math.min(...vals);
-        const minDiff = Math.max(50, range * 0.25); // 25% des Tidenhubs
-        const minSepMs = 3 * 60 * 60 * 1000;        // mind. 3h zwischen zwei Extrema
-        const minTimeSepMs = 60 * 60 * 1000;
+        // Fenstergröße: +/- 60 Minuten → ~12 Punkte bei 5-Minuten-Intervall
+        const winPts = Math.max(6, Math.round(60 / dtMin));
 
-        let allMax = [], allMin = [];
-        for (let i = 2; i < smooth.length - 2; i++) {
-          const isMax = smooth[i] > smooth[i-1] && smooth[i] > smooth[i-2] &&
-                        smooth[i] > smooth[i+1] && smooth[i] > smooth[i+2];
-          const isMin = smooth[i] < smooth[i-1] && smooth[i] < smooth[i-2] &&
-                        smooth[i] < smooth[i+1] && smooth[i] < smooth[i+2];
-          if (isMax) {
-            if (!allMax.length || times[i] - allMax[allMax.length-1].t >= minSepMs)
+        const range   = Math.max(...vals) - Math.min(...vals);
+        const minDiff = Math.max(30, range * 0.10); // 10% Tidenhub
+        const minSepMs = 3 * 60 * 60 * 1000;        // mind. 3h zwischen HW und NW
+
+        // Fenster-basierte Peak-Suche: Punkt muss Maximum/Minimum im Fenster sein
+        const allMax = [], allMin = [];
+        for (let i = winPts; i < vals.length - winPts; i++) {
+          const window = vals.slice(i - winPts, i + winPts + 1);
+          const winMax = Math.max(...window);
+          const winMin = Math.min(...window);
+
+          if (vals[i] === winMax) {
+            // Nur aufnehmen wenn mind. minSepMs vom letzten Maximum entfernt
+            if (!allMax.length || times[i] - allMax[allMax.length-1].t >= minSepMs) {
               allMax.push({ v: Math.round(vals[i]), t: times[i] });
-            else if (vals[i] > allMax[allMax.length-1].v)
+            } else if (vals[i] > allMax[allMax.length-1].v) {
+              // Höheres Maximum im selben Zeitfenster ersetzt das schwächere
               allMax[allMax.length-1] = { v: Math.round(vals[i]), t: times[i] };
+            }
           }
-          if (isMin) {
-            if (!allMin.length || times[i] - allMin[allMin.length-1].t >= minSepMs)
+          if (vals[i] === winMin) {
+            if (!allMin.length || times[i] - allMin[allMin.length-1].t >= minSepMs) {
               allMin.push({ v: Math.round(vals[i]), t: times[i] });
-            else if (vals[i] < allMin[allMin.length-1].v)
+            } else if (vals[i] < allMin[allMin.length-1].v) {
               allMin[allMin.length-1] = { v: Math.round(vals[i]), t: times[i] };
+            }
           }
         }
 
-        // Nur valide Paare: HW und NW müssen sich um minDiff unterscheiden
-        // und mind. 1h auseinanderliegen
+        // Valide Paare: HW und NW müssen minDiff und mind. 3h auseinanderliegen
         const validMaxima = allMax.filter(mx =>
           allMin.some(mn => Math.abs(mx.v - mn.v) >= minDiff &&
-                            Math.abs(mx.t - mn.t) >= minTimeSepMs)
+                            Math.abs(mx.t - mn.t) >= minSepMs)
         );
         const validMinima = allMin.filter(mn =>
           allMax.some(mx => Math.abs(mx.v - mn.v) >= minDiff &&
-                            Math.abs(mx.t - mn.t) >= minTimeSepMs)
+                            Math.abs(mx.t - mn.t) >= minSepMs)
         );
 
-        const lastMax = validMaxima.length ? validMaxima[validMaxima.length-1] : null;
-        const lastMin = validMinima.length ? validMinima[validMinima.length-1] : null;
+        let lastMax = validMaxima.length ? validMaxima[validMaxima.length-1] : null;
+        let lastMin = validMinima.length ? validMinima[validMinima.length-1] : null;
+        let isFallback = false;
+
+        // Notfall-Fallback: Kein valides Extremum gefunden → 24h Max/Min
+        if (!lastMax && !lastMin) {
+          isFallback = true;
+          const last24 = tsData24.slice(-288); // ~24h bei 5-Min-Intervall
+          const v24 = last24.map(d => d.value);
+          const t24 = last24.map(d => new Date(d.timestamp));
+          const maxIdx = v24.indexOf(Math.max(...v24));
+          const minIdx = v24.indexOf(Math.min(...v24));
+          lastMax = { v: Math.round(v24[maxIdx]), t: t24[maxIdx], fallback: true };
+          lastMin = { v: Math.round(v24[minIdx]), t: t24[minIdx], fallback: true };
+        }
 
         const validPair = !!(lastMax && lastMin &&
           Math.abs(lastMax.v - lastMin.v) >= minDiff &&
-          Math.abs(lastMax.t - lastMin.t) >= minTimeSepMs);
+          Math.abs(lastMax.t - lastMin.t) >= minSepMs);
 
         const fmt = t => t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-        const fmtDate = t => {
+        const fmtDate = (t, fallback) => {
           const d = new Date(t);
           const today = new Date();
           const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-          if (d.toDateString() === today.toDateString()) return fmt(t);
+          const prefix = fallback ? '24h ' : '';
+          if (d.toDateString() === today.toDateString()) return prefix + (fallback ? 'Max ' : '') + fmt(t);
           if (d.toDateString() === yesterday.toDateString()) return `Gestern ${fmt(t)}`;
           return `${d.getDate()}.${d.getMonth()+1}. ${fmt(t)}`;
         };
 
         if (lastMax || lastMin) {
           let currentTide = trend === '↗' ? '🌊 Flut' : '🌀 Ebbe';
-          if (validPair) currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
+          if (validPair && !isFallback) currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
 
           tideHTML = `
-            <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND</div>
+            <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND${isFallback ? ' (24h Schätzwert)' : ''}</div>
             <div class="pegel-tide">
               ${lastMax ? `<div class="tide-item">
                 <div class="tide-type">🌊</div>
-                <div class="tide-label">Letztes Hochwasser</div>
-                <div class="tide-time">${fmtDate(lastMax.t)}</div>
+                <div class="tide-label">${isFallback ? '24h Maximum' : 'Letztes Hochwasser'}</div>
+                <div class="tide-time">${fmtDate(lastMax.t, isFallback)}</div>
                 <div class="tide-val">${lastMax.v} cm</div>
               </div>` : ''}
               ${(lastMin && validPair) ? `<div class="tide-item">
                 <div class="tide-type">🌀</div>
-                <div class="tide-label">Letztes Niedrigwasser</div>
-                <div class="tide-time">${fmtDate(lastMin.t)}</div>
+                <div class="tide-label">${isFallback ? '24h Minimum' : 'Letztes Niedrigwasser'}</div>
+                <div class="tide-time">${fmtDate(lastMin.t, isFallback)}</div>
                 <div class="tide-val">${lastMin.v} cm</div>
               </div>` : ''}
             </div>
