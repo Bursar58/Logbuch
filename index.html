@@ -1971,80 +1971,83 @@ async function fetchPegelForStation(station, distKm) {
       else if (diff < -3) { trend = '↘'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
     }
 
-    // Gezeiten — 72h Daten, Richtungsumkehr-Algorithmus
+    // Gezeiten — 72h Daten, robuster Peak-Algorithmus
     let tideHTML = '';
     try {
-      const tsUrl24 = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P3D`;
-      const tsRes24 = await fetch(tsUrl24);
-      const tsData24 = await tsRes24.json();
+      const tsUrl3d = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P3D`;
+      const tsRes3d = await fetch(tsUrl3d);
+      const tsData  = await tsRes3d.json();
 
-      if (tsData24 && tsData24.length >= 12) {
-        const vals  = tsData24.map(d => d.value);
-        const times = tsData24.map(d => new Date(d.timestamp));
+      if (tsData && tsData.length >= 24) {
+        const vals  = tsData.map(d => d.value);
+        const times = tsData.map(d => new Date(d.timestamp));
+        const n     = vals.length;
 
-        // Glättung: 11-Punkte-Mittelwert (~55 Min bei 5-Min-Auflösung)
-        // Eliminiert Rauschen zuverlässig ohne echte Scheitelpunkte zu verschieben
-        const smooth = vals.map((v, i) => {
-          const from = Math.max(0, i-5), to = Math.min(vals.length-1, i+5);
-          const slice = vals.slice(from, to+1);
-          return slice.reduce((a,b) => a+b, 0) / slice.length;
+        // Starke Glättung: 21-Punkte (~105 Min bei 5-Min-Auflösung)
+        // Entfernt alles Rauschen, bewahrt echte Gezeitenkurve
+        const smooth = vals.map((_, i) => {
+          const from = Math.max(0, i - 10);
+          const to   = Math.min(n - 1, i + 10);
+          let sum = 0;
+          for (let j = from; j <= to; j++) sum += vals[j];
+          return sum / (to - from + 1);
         });
 
-        const range    = Math.max(...smooth) - Math.min(...smooth);
-        const minDiff  = Math.max(50, range * 0.15); // 15% Tidenhub
-        const minSepMs = 3 * 60 * 60 * 1000;         // mind. 3h zwischen zwei HW
+        // Einfacher Peak-Finder auf der geglätteten Kurve:
+        // Ein Punkt ist HW wenn er größer als alle 12 Punkte davor UND danach
+        // (~60 Minuten Abstand in beide Richtungen)
+        const dtMin  = n > 1 ? (times[1] - times[0]) / 60000 : 5;
+        const half   = Math.max(8, Math.round(60 / dtMin));
+        const minSep = Math.round(3 * 60 / dtMin); // 3h in Punkte
 
-        // Richtungsumkehr-Algorithmus:
-        // Suche Punkte wo die geglättete Kurve von steigend auf fallend wechselt (HW)
-        // oder von fallend auf steigend (NW)
-        const allMax = [], allMin = [];
-        for (let i = 1; i < smooth.length - 1; i++) {
-          const rising  = smooth[i] > smooth[i-1];
-          const falling = smooth[i] < smooth[i-1];
-          const wasRising  = smooth[i-1] > smooth[i-2] || (i >= 2 && smooth[i-1] >= smooth[i-2]);
-          const wasFalling = smooth[i-1] < smooth[i-2] || (i >= 2 && smooth[i-1] <= smooth[i-2]);
+        const peaks = [], troughs = [];
 
-          // Lokales Maximum: war steigend, jetzt fallend
-          if (wasRising && smooth[i] < smooth[i-1]) {
-            const peak = { v: Math.round(vals[i-1]), t: times[i-1] };
-            if (!allMax.length || peak.t - allMax[allMax.length-1].t >= minSepMs) {
-              allMax.push(peak);
-            } else if (peak.v > allMax[allMax.length-1].v) {
-              allMax[allMax.length-1] = peak;
+        for (let i = half; i < n - half; i++) {
+          let isMax = true, isMin = true;
+          for (let j = i - half; j <= i + half; j++) {
+            if (j === i) continue;
+            if (smooth[j] >= smooth[i]) isMax = false;
+            if (smooth[j] <= smooth[i]) isMin = false;
+          }
+          if (isMax) {
+            if (!peaks.length || i - peaks[peaks.length-1].idx >= minSep) {
+              peaks.push({ idx: i, v: Math.round(vals[i]), t: times[i] });
+            } else if (smooth[i] > smooth[peaks[peaks.length-1].idx]) {
+              peaks[peaks.length-1] = { idx: i, v: Math.round(vals[i]), t: times[i] };
             }
           }
-          // Lokales Minimum: war fallend, jetzt steigend
-          if (wasFalling && smooth[i] > smooth[i-1]) {
-            const trough = { v: Math.round(vals[i-1]), t: times[i-1] };
-            if (!allMin.length || trough.t - allMin[allMin.length-1].t >= minSepMs) {
-              allMin.push(trough);
-            } else if (trough.v < allMin[allMin.length-1].v) {
-              allMin[allMin.length-1] = trough;
+          if (isMin) {
+            if (!troughs.length || i - troughs[troughs.length-1].idx >= minSep) {
+              troughs.push({ idx: i, v: Math.round(vals[i]), t: times[i] });
+            } else if (smooth[i] < smooth[troughs[troughs.length-1].idx]) {
+              troughs[troughs.length-1] = { idx: i, v: Math.round(vals[i]), t: times[i] };
             }
           }
         }
 
-        // Neuestes HW und NW mit ausreichendem Tidenhub-Unterschied
+        // Tidenhub-Validierung: HW und NW müssen sich um mind. 15% des Gesamtbereichs unterscheiden
+        const range   = Math.max(...vals) - Math.min(...vals);
+        const minDiff = Math.max(50, range * 0.15);
+
+        // Neuestes valides HW und NW (von hinten suchen)
         let lastMax = null, lastMin = null;
-        for (let i = allMax.length-1; i >= 0; i--) {
-          if (allMin.some(mn => Math.abs(allMax[i].v - mn.v) >= minDiff)) {
-            lastMax = allMax[i]; break;
+        for (let i = peaks.length - 1; i >= 0; i--) {
+          if (troughs.some(t => Math.abs(peaks[i].v - t.v) >= minDiff)) {
+            lastMax = peaks[i]; break;
           }
         }
-        for (let i = allMin.length-1; i >= 0; i--) {
-          if (allMax.some(mx => Math.abs(allMin[i].v - mx.v) >= minDiff)) {
-            lastMin = allMin[i]; break;
+        for (let i = troughs.length - 1; i >= 0; i--) {
+          if (peaks.some(p => Math.abs(troughs[i].v - p.v) >= minDiff)) {
+            lastMin = troughs[i]; break;
           }
         }
 
+        // Fallback: kein valides Paar → 24h Math.max/min
         let isFallback = false;
-
-        // Notfall-Fallback: 24h Math.max/min
         if (!lastMax || !lastMin) {
           isFallback = true;
-          const last24 = tsData24.slice(-288);
-          const v24 = last24.map(d => d.value);
-          const t24 = last24.map(d => new Date(d.timestamp));
+          const cut = Math.max(0, n - Math.round(24 * 60 / dtMin));
+          const v24 = vals.slice(cut), t24 = times.slice(cut);
           if (!lastMax) {
             const idx = v24.indexOf(Math.max(...v24));
             lastMax = { v: Math.round(v24[idx]), t: t24[idx] };
@@ -2058,19 +2061,21 @@ async function fetchPegelForStation(station, distKm) {
         const validPair = !!(lastMax && lastMin &&
           Math.abs(lastMax.v - lastMin.v) >= minDiff);
 
-        const fmt = t => t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        const fmt = t => t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const fmtDate = t => {
-          const d = new Date(t);
-          const today = new Date();
-          const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-          if (d.toDateString() === today.toDateString()) return `Heute ${fmt(t)}`;
-          if (d.toDateString() === yesterday.toDateString()) return `Gestern ${fmt(t)}`;
+          const d = new Date(t), now = new Date();
+          const yest = new Date(now); yest.setDate(now.getDate() - 1);
+          if (d.toDateString() === now.toDateString())  return `Heute ${fmt(t)}`;
+          if (d.toDateString() === yest.toDateString()) return `Gestern ${fmt(t)}`;
           return `${d.getDate()}.${d.getMonth()+1}. ${fmt(t)}`;
         };
 
         if (lastMax || lastMin) {
+          // Gezeitenstatus: welches Ereignis liegt zuletzt?
           let currentTide = trend === '↗' ? '🌊 Flut' : '🌀 Ebbe';
-          if (validPair) currentTide = lastMax.t > lastMin.t ? '🌊 Flut' : '🌀 Ebbe';
+          if (validPair) {
+            currentTide = lastMax.t > lastMin.t ? '🌀 Ebbe' : '🌊 Flut';
+          }
 
           tideHTML = `
             <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND${isFallback ? ' (Schätzwert)' : ''}</div>
