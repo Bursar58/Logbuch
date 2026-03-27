@@ -1971,125 +1971,26 @@ async function fetchPegelForStation(station, distKm) {
       else if (diff < -3) { trend = '↘'; trendColor = 'var(--amber)'; trendLabel = `${diff.toFixed(0)} cm (fallend)`;  }
     }
 
-    // Gezeiten — 72h Daten, robuster Peak-Algorithmus
-    let tideHTML = '';
-    try {
-      const tsUrl3d = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${station.uuid}/W/measurements.json?start=P3D`;
-      const tsRes3d = await fetch(tsUrl3d);
-      const tsData  = await tsRes3d.json();
+    // Gezeiten-Berechnung entfernt — zu unzuverlässig aus Rohdaten
+    // Nutzer wird zur BSH-Seite für exakte Gezeitendaten verlinkt
+    let tideHTML = `
+      <div style="margin-top:10px;background:rgba(0,180,216,0.07);border:1px solid rgba(0,180,216,0.2);border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--muted);margin-bottom:8px">GEZEITENINFO</div>
+        <div style="font-size:12px;color:var(--text);line-height:1.6;margin-bottom:10px">
+          Für exakte Hoch- und Niedrigwasserzeiten (BSH-geprüft):
+        </div>
+        <a href="https://wasserstand-nordsee.bsh.de/hamburg_st-pauli" 
+           target="_blank"
+           style="display:block;background:linear-gradient(135deg,#1a3a4a,#00b4d8);color:#fff;text-decoration:none;border-radius:8px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;text-align:center;letter-spacing:0.5px">
+          🌊 BSH Gezeitenvorhersage Hamburg →
+        </a>
+        <a href="https://www.pegelonline.wsv.de/webservices/zeitreihe/visualisierung?pegelnummer=5952050"
+           target="_blank"
+           style="display:block;margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid var(--card-border);color:var(--muted);text-decoration:none;border-radius:8px;padding:8px 14px;font-family:'Space Mono',monospace;font-size:11px;text-align:center">
+          📈 Pegelkurve St. Pauli (Pegelonline) →
+        </a>
+      </div>`;
 
-      if (tsData && tsData.length >= 24) {
-        const vals  = tsData.map(d => d.value);
-        const times = tsData.map(d => new Date(d.timestamp));
-        const n     = vals.length;
-
-        // Starke Glättung: 31-Punkte (~155 Min bei 5-Min-Auflösung)
-        // Entfernt alles Rauschen, bewahrt echte Gezeitenkurve
-        const smooth = vals.map((_, i) => {
-          const from = Math.max(0, i - 15);
-          const to   = Math.min(n - 1, i + 15);
-          let sum = 0;
-          for (let j = from; j <= to; j++) sum += vals[j];
-          return sum / (to - from + 1);
-        });
-
-        // Peak-Finder: Punkt muss Maximum in +-90 Min Fenster sein
-        const dtMin  = n > 1 ? (times[1] - times[0]) / 60000 : 5;
-        const half   = Math.max(12, Math.round(90 / dtMin));
-        const minSep = Math.round(3 * 60 / dtMin); // 3h in Punkte
-
-        const peaks = [], troughs = [];
-
-        for (let i = half; i < n - half; i++) {
-          let isMax = true, isMin = true;
-          for (let j = i - half; j <= i + half; j++) {
-            if (j === i) continue;
-            if (smooth[j] >= smooth[i]) isMax = false;
-            if (smooth[j] <= smooth[i]) isMin = false;
-          }
-          if (isMax) {
-            if (!peaks.length || i - peaks[peaks.length-1].idx >= minSep) {
-              peaks.push({ idx: i, v: Math.round(vals[i]), t: times[i] });
-            } else if (smooth[i] > smooth[peaks[peaks.length-1].idx]) {
-              peaks[peaks.length-1] = { idx: i, v: Math.round(vals[i]), t: times[i] };
-            }
-          }
-          if (isMin) {
-            if (!troughs.length || i - troughs[troughs.length-1].idx >= minSep) {
-              troughs.push({ idx: i, v: Math.round(vals[i]), t: times[i] });
-            } else if (smooth[i] < smooth[troughs[troughs.length-1].idx]) {
-              troughs[troughs.length-1] = { idx: i, v: Math.round(vals[i]), t: times[i] };
-            }
-          }
-        }
-
-        // Tidenhub-Validierung: HW und NW müssen sich um mind. 15% des Gesamtbereichs unterscheiden
-        const range   = Math.max(...vals) - Math.min(...vals);
-        const minDiff = Math.max(50, range * 0.15);
-
-        // Neuestes valides HW und NW (von hinten suchen)
-        let lastMax = null, lastMin = null;
-        for (let i = peaks.length - 1; i >= 0; i--) {
-          if (troughs.some(t => Math.abs(peaks[i].v - t.v) >= minDiff)) {
-            lastMax = peaks[i]; break;
-          }
-        }
-        for (let i = troughs.length - 1; i >= 0; i--) {
-          if (peaks.some(p => Math.abs(troughs[i].v - p.v) >= minDiff)) {
-            lastMin = troughs[i]; break;
-          }
-        }
-
-        // Fallback: kein valides Paar → 24h Math.max/min
-        let isFallback = false;
-        if (!lastMax || !lastMin) {
-          isFallback = true;
-          const cut = Math.max(0, n - Math.round(24 * 60 / dtMin));
-          const v24 = vals.slice(cut), t24 = times.slice(cut);
-          if (!lastMax) {
-            const idx = v24.indexOf(Math.max(...v24));
-            lastMax = { v: Math.round(v24[idx]), t: t24[idx] };
-          }
-          if (!lastMin) {
-            const idx = v24.indexOf(Math.min(...v24));
-            lastMin = { v: Math.round(v24[idx]), t: t24[idx] };
-          }
-        }
-
-        const validPair = !!(lastMax && lastMin &&
-          Math.abs(lastMax.v - lastMin.v) >= minDiff);
-
-        const fmt = t => t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const fmtDate = t => {
-          const d = new Date(t), now = new Date();
-          const yest = new Date(now); yest.setDate(now.getDate() - 1);
-          if (d.toDateString() === now.toDateString())  return `Heute ${fmt(t)}`;
-          if (d.toDateString() === yest.toDateString()) return `Gestern ${fmt(t)}`;
-          return `${d.getDate()}.${d.getMonth()+1}. ${fmt(t)}`;
-        };
-
-        if (lastMax || lastMin) {
-          tideHTML = `
-            <div style="margin-top:10px;font-size:11px;font-family:'Space Mono',monospace;color:var(--muted)">GEZEITENTREND${isFallback ? ' (Schätzwert)' : ''}</div>
-            <div class="pegel-tide">
-              ${lastMax ? `<div class="tide-item">
-                <div class="tide-type">🌊</div>
-                <div class="tide-label">${isFallback ? '24h Maximum' : 'Letztes Hochwasser'}</div>
-                <div class="tide-time">${fmtDate(lastMax.t)}</div>
-                <div class="tide-val">${lastMax.v} cm</div>
-              </div>` : ''}
-              ${(lastMin && validPair) ? `<div class="tide-item">
-                <div class="tide-type">🌀</div>
-                <div class="tide-label">${isFallback ? '24h Minimum' : 'Letztes Niedrigwasser'}</div>
-                <div class="tide-time">${fmtDate(lastMin.t)}</div>
-                <div class="tide-val">${lastMin.v} cm</div>
-              </div>` : ''}
-            </div>`;
-        }
-      }
-    } catch(e) {
-      // Gezeitendaten nicht verfügbar
-    }
 
     // Warnungen
     let warnHTML = '';
